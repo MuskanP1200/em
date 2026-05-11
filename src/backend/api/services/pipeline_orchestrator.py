@@ -3,6 +3,7 @@
 # Step 2 — VI: vehicle image verification per est_id
 # Step 3 — EM: estimate matching (parts + labour validation) per est_id
 
+import time
 import yaml
 import logging
 
@@ -21,8 +22,10 @@ from estimate_matching.config import (
 from sql_connection import read_table, write_table
 from estimate_matching.em_pipeline import (
     run_em_pipeline,
+    save_results,
     create_llm_client,
 )
+from estimate_matching.db_writer import reset_em_tables
 from vehicle_verification.vi_pipeline import run_vi_pipeline
 from api_ingest.api_ingestion_pipeline import (
     run_api_ingestion_pipeline,
@@ -39,11 +42,6 @@ from settings import get_settings
 settings = get_settings()
 configure_logging(settings)
 
-logging.getLogger("openai").setLevel(logging.WARNING)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("charset_normalizer").setLevel(logging.WARNING)
-
 logger = logging.getLogger("pipeline_orchestrator")
 
 # ── Run flags ─────────────────────────────────────────────────────────────────
@@ -53,6 +51,7 @@ _run = yaml.safe_load(open(Path(__file__).resolve().parent / "config.yaml")).get
 RUN_INGESTION = _run.get("ingestion", True)
 RUN_VI = _run.get("vehicle_verification", True)
 RUN_EM = _run.get("estimate_matching", True)
+RESET_OUTPUT = _run.get("reset_output_tables", False)
 
 
 # ── Data helpers ─────────────────────────────────────────────────────────────
@@ -64,6 +63,13 @@ def cast_numeric(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
 
 
 def run_pipeline():
+    pipeline_start = time.perf_counter()
+    vi_ok, vi_fail, em_ok, em_fail = 0, 0, 0, 0
+
+    # ── Reset output tables (dev/test only) ───────────────────────────────────
+    if RESET_OUTPUT:
+        logger.info("reset_output_tables=true — dropping and recreating output tables.")
+        reset_em_tables()
 
     # ── Step 1: API ingestion ─────────────────────────────────────────────────
     if RUN_INGESTION:
@@ -96,27 +102,52 @@ def run_pipeline():
 
     client = create_llm_client() if RUN_EM else None
 
-    for est_id in est_ids[:10]:
+    all_summary, all_subtot, all_line = [], [], []
+
+    for est_id in est_ids:
         est_rows = est_line_df[est_line_df["est_id"] == int(est_id)]
         subtot_rows = subtot_df[subtot_df["est_id"] == int(est_id)]
 
         # ── Step 2: Vehicle verification ──────────────────────────────────────
         if RUN_VI:
-            logger.info("=== Step 2: VI for %s ===", est_id)
+            t = time.perf_counter()
             try:
                 run_vi_pipeline(est_id)
-                logger.info("VI completed for %s", est_id)
+                logger.info("VI  ✓ est_id=%-12s  %.1fs", est_id, time.perf_counter() - t)
+                vi_ok += 1
             except Exception as e:
-                logger.error("VI failed for %s: %s", est_id, e)
+                logger.error("VI  ✗ est_id=%-12s  %s", est_id, e, exc_info=True)
+                vi_fail += 1
 
         # ── Step 3: Estimate matching ─────────────────────────────────────────
         if RUN_EM:
-            logger.info("=== Step 3: EM for %s ===", est_id)
+            t = time.perf_counter()
             try:
-                run_em_pipeline(est_id, est_rows, subtot_rows, client)
-                logger.info("EM completed for %s", est_id)
+                summary, subtot, line = run_em_pipeline(
+                    est_id, est_rows, subtot_rows, client, save=False
+                )
+                all_summary.append(summary)
+                all_subtot.append(subtot)
+                all_line.append(line)
+                logger.info("EM  ✓ est_id=%-12s  %.1fs", est_id, time.perf_counter() - t)
+                em_ok += 1
             except Exception as e:
-                logger.error("EM failed for %s: %s", est_id, e)
+                logger.error("EM  ✗ est_id=%-12s  %s", est_id, e, exc_info=True)
+                em_fail += 1
+
+    # ── Bulk EM write ─────────────────────────────────────────────────────────
+    if RUN_EM and all_summary:
+        logger.info("=== Writing EM results (%d estimates) ===", len(all_summary))
+        try:
+            save_results(
+                pd.concat(all_summary, ignore_index=True),
+                pd.concat(all_subtot, ignore_index=True),
+                pd.concat(all_line, ignore_index=True),
+                if_exists="replace",
+            )
+            logger.info("EM results written.")
+        except Exception as e:
+            logger.error("EM bulk write failed: %s", e, exc_info=True)
 
     # ── Step 4: Enrich EM summary with VI results ─────────────────────────────
     if RUN_VI and RUN_EM:
@@ -155,6 +186,21 @@ def run_pipeline():
             )
         except Exception as e:
             logger.error("Step 4 enrichment failed: %s", e, exc_info=True)
+
+    # ── Run summary ───────────────────────────────────────────────────────────
+    total_sec = time.perf_counter() - pipeline_start
+    logger.info(
+        "=" * 60
+        + "\nPIPELINE COMPLETE  %.1fs"
+        + "\n  estimates : %d"
+        + "\n  VI  : %d ok  %d failed"
+        + "\n  EM  : %d ok  %d failed"
+        + "\n" + "=" * 60,
+        total_sec,
+        len(est_ids),
+        vi_ok, vi_fail,
+        em_ok, em_fail,
+    )
 
 
 if __name__ == "__main__":
