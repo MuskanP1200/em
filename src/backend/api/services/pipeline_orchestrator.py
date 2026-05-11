@@ -22,7 +22,6 @@ from estimate_matching.config import (
 from sql_connection import read_table, write_table
 from estimate_matching.em_pipeline import (
     run_em_pipeline,
-    save_results,
     create_llm_client,
 )
 from estimate_matching.db_writer import reset_em_tables
@@ -102,8 +101,6 @@ def run_pipeline():
 
     client = create_llm_client() if RUN_EM else None
 
-    all_summary, all_subtot, all_line = [], [], []
-
     for est_id in est_ids:
         est_rows = est_line_df[est_line_df["est_id"] == int(est_id)]
         subtot_rows = subtot_df[subtot_df["est_id"] == int(est_id)]
@@ -123,31 +120,12 @@ def run_pipeline():
         if RUN_EM:
             t = time.perf_counter()
             try:
-                summary, subtot, line = run_em_pipeline(
-                    est_id, est_rows, subtot_rows, client, save=False
-                )
-                all_summary.append(summary)
-                all_subtot.append(subtot)
-                all_line.append(line)
+                run_em_pipeline(est_id, est_rows, subtot_rows, client)
                 logger.info("EM  ✓ est_id=%-12s  %.1fs", est_id, time.perf_counter() - t)
                 em_ok += 1
             except Exception as e:
                 logger.error("EM  ✗ est_id=%-12s  %s", est_id, e, exc_info=True)
                 em_fail += 1
-
-    # ── Bulk EM write ─────────────────────────────────────────────────────────
-    if RUN_EM and all_summary:
-        logger.info("=== Writing EM results (%d estimates) ===", len(all_summary))
-        try:
-            save_results(
-                pd.concat(all_summary, ignore_index=True),
-                pd.concat(all_subtot, ignore_index=True),
-                pd.concat(all_line, ignore_index=True),
-                if_exists="replace",
-            )
-            logger.info("EM results written.")
-        except Exception as e:
-            logger.error("EM bulk write failed: %s", e, exc_info=True)
 
     # ── Step 4: Enrich EM summary with VI results ─────────────────────────────
     if RUN_VI and RUN_EM:
