@@ -13,10 +13,8 @@ from settings import get_settings
 BACKEND_URL: str = get_settings().BACKEND_URL
 
 
-def _filter_incidents_real(
-    search: str = "", status: str = "all"
-) -> List[Dict[str, Any]]:
-    """Call the real backend /api/incidents and return the list."""
+def filter_incidents(search: str = "", status: str = "all") -> List[Dict[str, Any]]:
+    """Call the backend /api/incidents and return the list."""
     params = {"status": status, "search": search}
     try:
         with httpx.Client(timeout=30) as client:
@@ -35,9 +33,9 @@ def _filter_incidents_real(
         raise RuntimeError(f"Could not reach backend at {BACKEND_URL}: {e}") from e
 
 
-def _get_incident_detail_real(incident_id: str) -> Optional[Dict[str, Any]]:
+def get_incident_detail(incident_id: str) -> Optional[Dict[str, Any]]:
     """
-    Call the real backend /api/incidents/{id}.
+    Call the backend /api/incidents/{id}.
     Returns None on 404, raises on other errors.
     Images arrive as SAS URLs in photo.url — no extra handling needed.
     """
@@ -57,14 +55,6 @@ def _get_incident_detail_real(incident_id: str) -> Optional[Dict[str, Any]]:
         ) from e
     except httpx.RequestError as e:
         raise RuntimeError(f"Could not reach backend at {BACKEND_URL}: {e}") from e
-
-
-def filter_incidents(search: str = "", status: str = "all") -> List[Dict[str, Any]]:
-    return _filter_incidents_real(search, status)
-
-
-def get_incident_detail(incident_id: str) -> Optional[Dict[str, Any]]:
-    return _get_incident_detail_real(incident_id)
 
 
 # Feedback
