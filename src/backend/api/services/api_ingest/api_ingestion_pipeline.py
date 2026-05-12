@@ -24,6 +24,7 @@ from api_ingest.estimate_loader import (  # noqa: E402
     search_and_save_new_estimates,  # noqa: E402
     fetch_estimate_details,  # noqa: E402
 )  # noqa: E402
+from api_ingest.db_staging import ensure_staging_tables  # noqa: E402
 from sql_connection import update_rows  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 def run_api_ingestion_pipeline() -> list[str]:
     logger.info("=== API ingest pipeline start ===")
+    ensure_staging_tables()
 
     creds = get_settings().model_dump()
     token = get_token(
