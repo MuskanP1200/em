@@ -27,16 +27,6 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("cdr_assistant")
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-logger = logging.getLogger("cdr_assistant")
 
 # ---------------------------------------------------------------------------
 # App
@@ -238,11 +228,4 @@ async def submit_feedback(
 # Entry-point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    import os
-
-    # os.environ["USE_MOCK_DATA"] = "true"  ; os.environ["BACKEND_URL"] = ""           # MOCK
-    # uvicorn.run("main:app", host="0.0.0.0", port=8005, reload=True)
-
-    os.environ["USE_MOCK_DATA"] = "false"
-    os.environ["BACKEND_URL"] = "http://localhost:8018"  # REAL
     uvicorn.run("main:app", host="0.0.0.0", port=4200, reload=True)  # nosec B104
