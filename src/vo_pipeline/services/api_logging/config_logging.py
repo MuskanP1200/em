@@ -33,6 +33,13 @@ def configure_logging(
     with open(config_file, "r") as lf:
         config_from_file = yaml.safe_load(lf)
 
+    # Ensure log directory exists
+    if "file" in config_from_file.get("handlers", {}):
+        log_file = config_from_file["handlers"]["file"].get("filename")
+        if log_file:
+            log_dir = Path(log_file).parent
+            log_dir.mkdir(parents=True, exist_ok=True)
+
     logging.config.dictConfig(config_from_file)
 
     app_filter = AppNameFilter(settings.APP_NAME)
