@@ -94,11 +94,10 @@ WITH est_base AS (
     WHERE ar.est_id::bigint::text = $1
 ),
 damage_info AS (
-    -- Damage description (was hardcoded "Not available", now real value from EM line detail)
     SELECT DISTINCT ON (est_id)
         est_id,
         dmg_dsc
-    FROM {schema}.{em_line_detail}
+    FROM {schema}.{line_table}
     WHERE est_id::bigint::text = $1
       AND dmg_dsc IS NOT NULL
     ORDER BY est_id
@@ -108,12 +107,8 @@ est_rates AS (
         est_id,
         bdy_lbr_rate, mchncl_lbr_rate, frm_lbr_rate, pnt_mtrl_rate, almn_lbr_rate,
         dmstc_part_disc_amt, frn_part_disc_amt, kyls_disc_amt,
-        NULL:text AS anti_crsn_dsc, 
-        NULL:text AS car_cvr_dsc, 
-        NULL:text AS hzrd_wst_dsc, 
-        NULL:text AS postscn, 
-        NULL:text AS clbrtn,   -- sublet rates
-        specl_instruct_txt, grp_note_txt                              -- text fields
+        anti_crsn_dsc, car_cvr_dsc, hzrd_wst_dsc, postscn, clbrtn,
+        specl_instruct_txt, grp_note_txt
     FROM {schema}.{line_table}
     WHERE est_id::bigint::text = $1
 ),
