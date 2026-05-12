@@ -6,12 +6,18 @@ formatters:
 handlers:
   console:
     class: logging.StreamHandler
-    level: DEBUG    # Overriden at runtime by configure_logging
+    level: DEBUG
     formatter: default
+  file:
+    class: logging.handlers.RotatingFileHandler
+    level: DEBUG
+    formatter: default
+    filename: logs/pipeline.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 5
 root:
-  # THis will be changed by the environment variable anyway
   level: DEBUG
-  handlers: [console]
+  handlers: [console, file]
 loggers:
   aiocache:
     level: INFO
