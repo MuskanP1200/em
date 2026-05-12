@@ -25,6 +25,7 @@ from estimate_matching.em_pipeline import (
     create_llm_client,
 )
 from estimate_matching.db_writer import reset_em_tables
+from api_ingest.db_staging import reset_staging_tables
 from vehicle_verification.vi_pipeline import run_vi_pipeline
 from api_ingest.api_ingestion_pipeline import (
     run_api_ingestion_pipeline,
@@ -47,10 +48,11 @@ logger = logging.getLogger("pipeline_orchestrator")
 _run = yaml.safe_load(open(Path(__file__).resolve().parent / "config.yaml")).get(
     "run", {}
 )
-RUN_INGESTION = _run.get("ingestion", True)
-RUN_VI = _run.get("vehicle_verification", True)
-RUN_EM = _run.get("estimate_matching", True)
-RESET_OUTPUT = _run.get("reset_output_tables", True)
+RUN_INGESTION   = _run.get("ingestion", True)
+RUN_VI          = _run.get("vehicle_verification", True)
+RUN_EM          = _run.get("estimate_matching", True)
+RESET_STAGING   = _run.get("reset_staging_tables", False)
+RESET_OUTPUT    = _run.get("reset_output_tables", False)
 
 
 # ── Data helpers ─────────────────────────────────────────────────────────────
@@ -65,7 +67,11 @@ def run_pipeline():
     pipeline_start = time.perf_counter()
     vi_ok, vi_fail, em_ok, em_fail = 0, 0, 0, 0
 
-    # ── Reset output tables (dev/test only) ───────────────────────────────────
+    # ── Reset tables (dev/test only) ──────────────────────────────────────────
+    if RESET_STAGING:
+        logger.info("reset_staging_tables=true — dropping and recreating staging tables.")
+        reset_staging_tables()
+
     if RESET_OUTPUT:
         logger.info("reset_output_tables=true — dropping and recreating output tables.")
         reset_em_tables()
