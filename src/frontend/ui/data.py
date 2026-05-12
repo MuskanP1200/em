@@ -1,53 +1,22 @@
 """
-data.py
+data.py — Frontend API client
 
-Toggle between mock data and the real backend using USE_MOCK.
-
-USE_MOCK = True  → returns full dummy data from this file (original behaviour)
-USE_MOCK = False → proxies calls to the real backend API
-
-Set via environment variable:
-USE_MOCK_DATA=true  uvicorn main:app --reload   ← mock (default)
-USE_MOCK_DATA=false uvicorn main:app --reload   ← real backend
-
-Or flip the hardcoded default below directly.
+Proxies all API calls to the real backend (no mock data toggle).
 """
 
-import os
 from typing import Any, Dict, List, Optional
 
 import httpx
 
-# ── Toggle ───────────────────────────────────────────────────────
-USE_MOCK: bool = os.getenv("USE_MOCK_DATA", "true").lower() == "true"
-BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000")
+from settings import get_settings
+
+BACKEND_URL: str = get_settings().BACKEND_URL
 
 
-# ════════════════════════════════════════════════════════════════
-# MOCK DATA  (original data.py content — fully restored)
-# ════════════════════════════════════════════════════════════════
+# ────────────────────────────────────────────────────────────────
+# Real Backend API
+# ────────────────────────────────────────────────────────────────
 
-INCIDENTS: List[Dict[str, Any]] = [
-    {"id": "25437", "sub_text": "GP10 · Brian Lentz", "status": "ai_flagged"},
-    {"id": "320054", "sub_text": "Toyota Camry", "status": "ai_approved"},
-    {"id": "035461", "sub_text": "Honda Civic", "status": "ai_flagged"},
-    {"id": "61265181", "sub_text": "Ford F-150", "status": "ai_approved"},
-    {"id": "1055188", "sub_text": "Chevrolet Malibu", "status": "ai_flagged"},
-    {"id": "698412", "sub_text": "Nissan Altima", "status": "pending_ai_review"},
-    {"id": "9846503", "sub_text": "Dodge Ram", "status": "ai_approved"},
-    {"id": "4421098", "sub_text": "Hyundai Sonata", "status": "ai_flagged"},
-    {"id": "7730021", "sub_text": "Kia Sportage", "status": "pending_ai_review"},
-    {"id": "5519872", "sub_text": "BMW 3 Series", "status": "ai_approved"},
-    {"id": "8834410", "sub_text": "Subaru Outback", "status": "ai_flagged"},
-    {"id": "2267543", "sub_text": "Jeep Wrangler", "status": "pending_ai_review"},
-    {"id": "9912004", "sub_text": "Tesla Model 3", "status": "ai_approved"},
-    {"id": "3345671", "sub_text": "Mazda CX-5", "status": "ai_flagged"},
-]
-
-# ---------------------------------------------------------------------------
-# Full detail for incident 25437
-# ---------------------------------------------------------------------------
-_DETAIL_25437: dict[str, Any] = {
     "topbar": {
         "incident_num": "25437",
         "vehicle": "2025 Ford Escape MO \u00a0·\u00a0 GP10 Truck — Brian Lentz",
@@ -1693,14 +1662,10 @@ def _get_incident_detail_real(incident_id: str) -> Optional[Dict[str, Any]]:
 
 
 def filter_incidents(search: str = "", status: str = "all") -> List[Dict[str, Any]]:
-    if USE_MOCK:
-        return _filter_incidents_mock(search, status)
     return _filter_incidents_real(search, status)
 
 
 def get_incident_detail(incident_id: str) -> Optional[Dict[str, Any]]:
-    if USE_MOCK:
-        return _get_incident_detail_mock(incident_id)
     return _get_incident_detail_real(incident_id)
 
 
