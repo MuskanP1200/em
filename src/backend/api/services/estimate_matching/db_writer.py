@@ -22,7 +22,11 @@ _NULL_STRINGS = {"none", "null", "na", "n/a", "nan", ""}
 # ── Boolean columns per table ─────────────────────────────────────────────────
 _BOOL_COLS_SUMMARY = ["lbr_est_pass", "parts_est_pass"]
 _BOOL_COLS_LINE = ["discount_match", "discount_expected"]
-_BOOL_COLS_SUBTOT = ["overcharged", "undercharged"]
+_BOOL_COLS_SUBTOT = [
+    "overcharged", "undercharged",
+    "parts_gross_match", "adj_match", "parts_net_match", "overall_parts_subtot_match",
+    "lbr_typ_hrs_match", "lbr_typ_unit_cost_match", "overall_lbr_match",
+]
 
 # ── Explicit DDL ──────────────────────────────────────────────────────────────
 _DDL_EST_SUMMARY = f"""
@@ -101,15 +105,15 @@ CREATE TABLE IF NOT EXISTS {OUTPUT_SCHEMA}.{TABLE_SUBTOT_DETAIL} (
     tot_amt                     DOUBLE PRECISION,
     adj_tot_amt                 DOUBLE PRECISION,
     net_amt                     DOUBLE PRECISION,
-    parts_gross_match           TEXT,
-    adj_match                   TEXT,
-    parts_net_match             TEXT,
-    overall_parts_subtot_match  TEXT,
-    lbr_typ_hrs_match           TEXT,
-    unit_cost_based_lbr_dsc     TEXT,
+    parts_gross_match           BOOLEAN,
+    adj_match                   BOOLEAN,
+    parts_net_match             BOOLEAN,
+    overall_parts_subtot_match  BOOLEAN,
+    lbr_typ_hrs_match           BOOLEAN,
+    unit_cost_based_lbr_dsc     DOUBLE PRECISION,
     calc_unit_cost              DOUBLE PRECISION,
-    lbr_typ_unit_cost_match     TEXT,
-    overall_lbr_match           TEXT,
+    lbr_typ_unit_cost_match     BOOLEAN,
+    overall_lbr_match           BOOLEAN,
     overcharged                 BOOLEAN,
     undercharged                BOOLEAN,
     bdy_lbr_rate                DOUBLE PRECISION,
@@ -127,7 +131,9 @@ CREATE TABLE IF NOT EXISTS {OUTPUT_SCHEMA}.{TABLE_SUBTOT_DETAIL} (
 
 def reset_em_tables() -> None:
     """Drop and recreate all EM output tables. Use during development/testing."""
-    tables = [TABLE_EST_SUMMARY, TABLE_SUBTOT_DETAIL, TABLE_LINE_DETAIL]
+    from estimate_matching.config import TABLE_OVERALL_SUMMARY
+
+    tables = [TABLE_EST_SUMMARY, TABLE_SUBTOT_DETAIL, TABLE_LINE_DETAIL, TABLE_OVERALL_SUMMARY]
     with get_engine().begin() as conn:
         for table in tables:
             conn.execute(text(f"DROP TABLE IF EXISTS {OUTPUT_SCHEMA}.{table} CASCADE"))
