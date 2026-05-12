@@ -362,12 +362,13 @@ def _parse_estimate_root(root: ET.Element) -> tuple[pd.DataFrame, pd.DataFrame]:
             "licplte_nbr": licplte_nbr,
             "odmtr_nbr": odmtr_nbr,
             "vendor_name": vendor_name,
+            "dmg_dsc": None,  # populated by future API; placeholder so column exists
             # ── IDs (synthetic) ───────────────────────────────────────────────
             # "elctrnc_est_dtl_id": elctrnc_est_dtl_id, #remove this eventually
             # "est_repr_id": est_repr_id, #remove this eventually
             "cieca_dtl_hdr_id": cieca_dtl_hdr_id,  # remove this eventually
             # ── Line item ─────────────────────────────────────────────────────
-            "revision_nbr": latest_revision_nbr,
+            "rvsn_nbr": latest_revision_nbr,
             "line_nbr": line_nbr,
             "line_dsc": line_dsc,
             "op_code": op_code,
