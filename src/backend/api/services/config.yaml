@@ -15,6 +15,8 @@ run:
   ingestion:            false
   vehicle_verification: true
   estimate_matching:    true
+  reset_staging_tables: false  # drop & recreate staging tables before running (set false in prod)
+  reset_output_tables:  false  # drop & recreate EM output tables before running (set false in prod)
 
 
 # ── Shared staging tables ─────────────────────────────────────────────────────
