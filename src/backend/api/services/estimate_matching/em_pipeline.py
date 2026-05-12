@@ -344,35 +344,16 @@ def match_parts_subtotals(
     gross_match = merged["line_tot_part_amt"].round(ROUND_DECIMALS) == merged[
         "gross_amt"
     ].round(ROUND_DECIMALS)
-    merged["parts_gross_match"] = np.where(
-        no_subtot,
-        "No subtotal found",
-        np.where(gross_match, "Match", "No Match"),
-    )
+    merged["parts_gross_match"] = np.where(no_subtot, None, gross_match)
 
     adj_match = merged["line_adj_amt"] == merged["adj_tot_amt"].round(ROUND_DECIMALS)
-    merged["adj_match"] = np.where(
-        no_subtot,
-        "No subtotal found",
-        np.where(adj_match, "Match", "No Match"),
-    )
+    merged["adj_match"] = np.where(no_subtot, None, adj_match)
 
     net_match = merged["line_net_amt"] == merged["tot_amt"].round(ROUND_DECIMALS)
-    merged["parts_net_match"] = np.where(
-        no_subtot,
-        "No subtotal found",
-        np.where(net_match, "Match", "No Match"),
-    )
+    merged["parts_net_match"] = np.where(no_subtot, None, net_match)
 
     merged["overall_parts_subtot_match"] = np.where(
-        no_subtot,
-        "No subtotal found",
-        np.where(
-            (merged["parts_gross_match"] == "Match")
-            & (merged["parts_net_match"] == "Match"),
-            "Match",
-            "No Match",
-        ),
+        no_subtot, None, gross_match & net_match
     )
 
     return merged.to_dict(orient="records")
@@ -416,9 +397,7 @@ def match_labor_subtotals(
     hrs_match = grouped["dtl_lbr_hr_qty"].round(ROUND_DECIMALS) == grouped[
         "tot_hr"
     ].round(ROUND_DECIMALS)
-    grouped["lbr_typ_hrs_match"] = np.where(
-        no_hr_data, "Match", np.where(hrs_match, "Match", "No Match")
-    )
+    grouped["lbr_typ_hrs_match"] = np.where(no_hr_data | hrs_match, True, False)
 
     # Unit cost match
     grouped["unit_cost_based_lbr_dsc"] = get_unit_cost_by_labor_type(grouped)
@@ -433,21 +412,18 @@ def match_labor_subtotals(
         "calc_unit_cost"
     ].round(ROUND_DECIMALS)
     grouped["lbr_typ_unit_cost_match"] = np.where(
-        no_hr_data,
-        "Match",
-        np.where(both_null, "Match", np.where(cost_match, "Match", "No Match")),
+        no_hr_data | both_null, None, np.where(cost_match, True, False)
     )
 
-    # Overall match
+    # Overall match: hrs must be True; unit cost must not be False (None = not validated, passes)
     grouped["overall_lbr_match"] = np.where(
-        (grouped["lbr_typ_hrs_match"] == "Match")
-        & (grouped["lbr_typ_unit_cost_match"] == "Match"),
-        "Match",
-        "No Match",
+        grouped["lbr_typ_hrs_match"].eq(True) & ~grouped["lbr_typ_unit_cost_match"].eq(False),
+        True,
+        False,
     )
 
     # Directional flags — only meaningful when unit cost mismatches
-    mismatch = grouped["lbr_typ_unit_cost_match"] == "No Match"
+    mismatch = grouped["lbr_typ_unit_cost_match"].eq(False)
     grouped["overcharged"] = np.where(
         mismatch, grouped["calc_unit_cost"] > grouped["unit_cost_based_lbr_dsc"], None
     )
@@ -699,7 +675,7 @@ def _build_output_tables(
     lbr_pass = (
         (
             df_lbr_audit.groupby("est_id")["overall_lbr_match"]
-            .apply(lambda x: (x == "Match").all())
+            .apply(lambda x: not x.eq(False).any())
             .rename("lbr_est_pass")
             .reset_index()
         )
@@ -710,7 +686,7 @@ def _build_output_tables(
     parts_pass = (
         (
             df_parts_subtot_audit.groupby("est_id")["overall_parts_subtot_match"]
-            .apply(lambda x: (x == "Match").all())
+            .apply(lambda x: not x.eq(False).any())
             .rename("parts_est_pass")
             .reset_index()
         )
@@ -744,7 +720,7 @@ def _build_output_tables(
 
     lbr_issues = (
         (
-            df_lbr_audit[df_lbr_audit["overall_lbr_match"] == "No Match"]
+            df_lbr_audit[df_lbr_audit["overall_lbr_match"].eq(False)]
             .groupby("est_id")
             .size()
             .rename("lbr_issues")
