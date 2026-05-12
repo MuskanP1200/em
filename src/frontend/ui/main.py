@@ -42,7 +42,6 @@ logger = logging.getLogger("cdr_assistant")
 # App
 # ---------------------------------------------------------------------------
 app = FastAPI(title="CDR Assistant", version="1.0.0", docs_url="/docs")
-templates = Jinja2Templates(directory="templates")
 
 REDIRECT_PATH = settings.REDIRECT_PATH
 SESSION_SECRET = settings.SESSION_SECRET
@@ -57,12 +56,8 @@ if settings.AUTH_ENABLED:
 else:
     logger.warning("AUTH ENABLED=False - running with mock user")
 
-
 DEV_USER = {"name": "Dev User", "email": "dev@localhost", "oid": "dev-oid-0000"}
-# ---------------------------------------------------------------------------
-# App
-# ---------------------------------------------------------------------------
-app = FastAPI(title="CDR Assistant", version="1.0.0", docs_url="/docs")
+
 app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
@@ -157,7 +152,7 @@ async def auth_callback(request: Request):
 @app.get("/logout")
 async def logout(request: Request):
     request.session.clear()
-    base_url = REDIRECT_URI.rsplit(REDIRECT_URI, 1)[0]
+    base_url = REDIRECT_URI.rsplit("/", 1)[0]
     logout_url = (
         f"{AUTHORITY}/oauth2/v2.0/logout" f"?post_logout_redirect_uri={base_url}/"
     )
@@ -173,7 +168,7 @@ async def index(request: Request):
     if not settings.AUTH_ENABLED:
         logger.info("GET / - auth disabled, serving main page as dev user.")
         return templates.TemplateResponse(
-            request=request, name="index.html", context={"user": DEV_USER}
+            request=request, name="index_new.html", context={"user": DEV_USER}
         )
     user = request.session.get("user")
     if not user:
@@ -214,7 +209,7 @@ async def incident_detail(incident_id: str, user: dict = Depends(require_user)):
         raise HTTPException(
             status_code=404, detail=f"Incident {incident_id!r} not found"
         )
-    print(f"Checking: {detail}")
+    logger.debug("incident detail: %s", detail)
     return detail
 
 
