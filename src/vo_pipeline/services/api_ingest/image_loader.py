@@ -11,11 +11,11 @@ import xmltodict
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from storage import upload_blob_bytes
 from api_ingest.api_request_builder import build_image_list_body, build_image_bytes_body
+from settings import get_settings  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-_cfg = yaml.safe_load(open(Path(__file__).resolve().parent.parent / "config.yaml"))
-BASE_URL = _cfg["api_ingest"]["base_url"]
+BASE_URL = get_settings().API_BASE_URL
 
 _COMMON_HEADERS = {
     "Content-Type": "application/xml",
@@ -33,7 +33,6 @@ def _post_xml(url: str, payload: str) -> dict:
 
 def fetch_image_list(token: str, est_id: str) -> list:
     """Returns list of attachment metadata dicts for a given estimate."""
-    logger.info("Fetching image list for est_id=%s...", est_id)
     response = _post_xml(BASE_URL, build_image_list_body(token, est_id))
 
     attachments = response.get("att:GetAttachmentsForEstimateRS", {}).get(
@@ -42,7 +41,6 @@ def fetch_image_list(token: str, est_id: str) -> list:
     if isinstance(attachments, dict):
         attachments = [attachments]
 
-    logger.info("Found %d attachment(s).", len(attachments))
     return attachments
 
 
@@ -50,8 +48,6 @@ def fetch_image_bytes(token: str, attachment: dict) -> tuple[str, bytes]:
     """Downloads a single image and returns (filename, raw_bytes)."""
     attachment_id = attachment.get("att:Id")
     attachment_name = attachment.get("att:Name", f"{attachment_id}.jpg")
-
-    logger.info("Downloading: %s (ID: %s)", attachment_name, attachment_id)
 
     response = _post_xml(BASE_URL, build_image_bytes_body(token, attachment_id))
 
@@ -88,10 +84,4 @@ def upload_estimate_images(token: str, est_id: str, container_client) -> list:
         except Exception as e:
             logger.error("Failed to upload %s: %s", attachment.get("att:Id"), e)
 
-    logger.info(
-        "Uploaded %d/%d image(s) to blob folder %s.",
-        len(uploaded_urls),
-        len(attachments),
-        blob_folder,
-    )
     return uploaded_urls
