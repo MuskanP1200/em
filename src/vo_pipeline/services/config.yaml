@@ -41,8 +41,6 @@ tables:
 # api_ingest
 # =============================================================================
 api_ingest:
-  auth_url:    "http://appsecwse-iprod/appsec/enhanced/webservice/rsi"
-  base_url:     "http://devaplyj:30040/vrservices/services"
   status_code: WAITONAUTH   # estimate status to search for
   group:       DR            # CDR group code
   max_records: 200            # null = fetch all; integer = cap for smoke-testing
@@ -74,13 +72,6 @@ vehicle_verification:
     vlm_rate_limit:      100  # max simultaneous VLM calls
     max_inflight_images: 50   # hard cap on images being processed at once
 
-  vlm:
-    deployment:            gpt-4o
-    api_version:           "2025-01-01-preview"
-    prompt_cost_per_1k:    0.0025
-    completion_cost_per_1k: 0.01
-    currency:              USD
-    
   logging:
     level:    INFO
     log_file: logs/vi_pipeline.log
@@ -96,12 +87,6 @@ estimate_matching:
   sources:
     postgres:
       schema: ice
-
-  llm:
-    deployment:  gpt-4o
-    api_version: "2024-12-01-preview"
-    endpoint:    "https://musk-vo-1.openai.azure.com/"
-    max_tokens:  4096
 
   filters:
     exclude_modules:
