@@ -86,6 +86,23 @@ class Settings(BaseSettings):
     ICE_API_USER_NAME: str = "SVC_AI_VEH_REPAIR"
     SVC_AI_VEH_REPAIR_PASSWORD: str
 
+    # ── API Ingest (environment-specific) ─────────────────────────────────
+    API_AUTH_URL: str = "http://appsecwse-iprod/appsec/enhanced/webservice/rsi"
+    API_BASE_URL: str = "http://devaplyj:30040/vrservices/services"
+
+    # ── Vehicle Verification: VLM Configuration (environment-specific) ─────
+    VLM_DEPLOYMENT: str = "gpt-4o"
+    VLM_API_VERSION: str = "2025-01-01-preview"
+    VLM_PROMPT_COST_PER_1K: float = 0.0025
+    VLM_COMPLETION_COST_PER_1K: float = 0.01
+    VLM_CURRENCY: str = "USD"
+
+    # ── Estimate Matching: LLM Configuration (environment-specific) ────────
+    LLM_DEPLOYMENT: str = "gpt-4o"
+    LLM_API_VERSION: str = "2024-12-01-preview"
+    LLM_ENDPOINT: str = "https://musk-vo-1.openai.azure.com/"
+    LLM_MAX_TOKENS: int = 4096
+
     @classmethod
     def settings_customise_sources(
         cls,
