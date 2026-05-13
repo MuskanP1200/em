@@ -73,27 +73,15 @@ class AzureVLMImageClassifier:
     }
 
     def __init__(self):
-        import yaml
-
-        _cfg_path = Path(__file__).resolve().parent.parent / "config.yaml"
-        _vlm_cfg = (
-            yaml.safe_load(_cfg_path.read_text())
-            .get("vehicle_verification", {})
-            .get("vlm", {})
-        )
-
-        self.deployment: str = _vlm_cfg.get("deployment", "gpt-4o")
-        self.api_version: str = _vlm_cfg.get("api_version", "2025-01-01-preview")
-        self.prompt_cost_per_1k: float = float(
-            _vlm_cfg.get("prompt_cost_per_1k", 0.0025)
-        )
-        self.completion_cost_per_1k: float = float(
-            _vlm_cfg.get("completion_cost_per_1k", 0.01)
-        )
-        self.currency: str = _vlm_cfg.get("currency", "USD")
+        settings = get_settings()
+        self.deployment: str = settings.VLM_DEPLOYMENT
+        self.api_version: str = settings.VLM_API_VERSION
+        self.prompt_cost_per_1k: float = settings.VLM_PROMPT_COST_PER_1K
+        self.completion_cost_per_1k: float = settings.VLM_COMPLETION_COST_PER_1K
+        self.currency: str = settings.VLM_CURRENCY
 
         try:
-            secrets = get_settings().model_dump()
+            secrets = settings.model_dump()
             self.endpoint = secrets["AZURE_OPENAI_ENDPOINT"]
             self.api_key = secrets["AZURE_OPENAI_API_KEY"]
         except (KeyError, Exception):
