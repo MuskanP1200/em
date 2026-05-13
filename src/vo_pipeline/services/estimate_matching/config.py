@@ -4,11 +4,16 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from settings import get_settings  # noqa: E402
 
 _full_cfg: dict[str, Any] = yaml.safe_load(
     (Path(__file__).parent.parent / "config.yaml").read_text()
 )
 _cfg = _full_cfg["estimate_matching"]
+_settings = get_settings()
 
 
 # ── ICE table map (alias → fully-qualified postgres name) ─────────────────────
@@ -29,7 +34,7 @@ API_INGEST_EST_SUBTOT: str = _staging["staging"]["est_subtot"]
 # ── API ingest settings ───────────────────────────────────────────────────────
 
 _api = _full_cfg["api_ingest"]
-AUTH_URL: str = _api["auth_url"]
+AUTH_URL: str = _settings.API_AUTH_URL
 API_MAX_RECORDS: int | None = _api.get("max_records")
 API_MAX_WORKERS: int = _api.get("max_workers", 4)
 API_CONFIG: dict = _api
@@ -81,10 +86,10 @@ DATA_SOURCE_MODE: str = _cfg["data_source_mode"]
 
 # ── LLM settings ──────────────────────────────────────────────────────────────
 
-LLM_DEPLOYMENT: str = _cfg["llm"]["deployment"]
-LLM_API_VERSION: str = _cfg["llm"]["api_version"]
-LLM_ENDPOINT: str = _cfg["llm"]["endpoint"]
-LLM_MAX_TOKENS: int = _cfg["llm"]["max_tokens"]
+LLM_DEPLOYMENT: str = _settings.LLM_DEPLOYMENT
+LLM_API_VERSION: str = _settings.LLM_API_VERSION
+LLM_ENDPOINT: str = _settings.LLM_ENDPOINT
+LLM_MAX_TOKENS: int = _settings.LLM_MAX_TOKENS
 
 # ── Query filters ─────────────────────────────────────────────────────────────
 
