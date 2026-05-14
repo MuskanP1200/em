@@ -34,6 +34,7 @@ from api_ingest.api_request_builder import (
     build_estimate_detail_body,
     build_electronic_estimate_body,
     build_cdr_body,
+    build_repair_incident_body,
 )
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -43,6 +44,7 @@ BASE_URL = get_settings().API_BASE_URL
 _NS_EST = "http://erac.com/vrservices/webservice/estimateWeb"
 _NS_VEN = "http://erac.com/vrservices/webservice/vendorWeb"
 _NS_CDR = "http://erac.com/vrservices/webservice/cdrWeb"
+_NS_REP = "http://erac.com/vrservices/webservice/repairWeb"
 _NS_WEB = "http://erac.com/vrservices/webservice"
 _NS_MES = "http://erac.com/services/common/message"
 
@@ -403,3 +405,60 @@ def _empty_cdr_rates() -> dict:
             "est_fee", "sublet_mrkup", "tear_down_fee",
         ]
     }
+
+
+# ── 5. Get Repair Incident (damage description) ────────────────────────────────
+
+
+def get_repair_incident_detail(token: str, repair_incident_id: str) -> Optional[str]:
+    """
+    Fetch damage description for a repair incident from SearchRepairIncidentRQ.
+
+    Parameters
+    ----------
+    token                : auth token from get_token()
+    repair_incident_id   : repair incident ID from estimate search results
+
+    Returns
+    -------
+    Damage description string, or None if not found or error
+
+    Response contains:
+        branch, buyBack, claimNumber, damageDescription, groupNumber,
+        incidentId, incidentTypeDesc, legacyClaimNumber
+    """
+    if not repair_incident_id:
+        return None
+
+    try:
+        body = build_repair_incident_body(token, repair_incident_id)
+        root = _post_xml(BASE_URL, body, timeout=30)
+        _check_status(root, f"SearchRepairIncident(id={repair_incident_id})")
+    except Exception as e:
+        log.warning(
+            "repair_incident_id=%s: DAMAGE DESCRIPTION FETCH FAILED — %s",
+            repair_incident_id,
+            e,
+            exc_info=True,
+        )
+        return None
+
+    # Find repairIncident element in response
+    repair_incident_el = root.find(f".//{{{_NS_REP}}}RepairIncident")
+    if repair_incident_el is None:
+        log.debug("repair_incident_id=%s: no RepairIncident element in response", repair_incident_id)
+        return None
+
+    # Extract damageDescription from RepairIncident
+    damage_el = repair_incident_el.find(f"{{{_NS_REP}}}damageDescription")
+    if damage_el is None or damage_el.get("{http://www.w3.org/2001/XMLSchema-instance}nil") == "true":
+        return None
+
+    damage_desc = (damage_el.text or "").strip() if damage_el.text else None
+    if damage_desc:
+        log.debug(
+            "repair_incident_id=%s: damage_description='%s'",
+            repair_incident_id,
+            damage_desc[:100],
+        )
+    return damage_desc
