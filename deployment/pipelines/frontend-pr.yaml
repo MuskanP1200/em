@@ -1,0 +1,42 @@
+trigger: none
+
+pr:
+  branches:
+    include: [main]
+  paths:
+    include: [src/frontend/*]
+
+jobs:
+  - job: FrontendChecks
+    pool: VO Pool
+    workspace:
+      clean: all
+    steps:
+      - script: |
+          set -e
+          cd src/frontend
+          python3 -m venv $(Pipeline.Workspace)/.venv
+          source $(Pipeline.Workspace)/.venv/bin/activate
+          pip install -r requirements/requirements.txt
+        displayName: 'Setup venv'
+      - script: |
+          set -e
+          cd src/frontend
+          source $(Pipeline.Workspace)/.venv/bin/activate
+          make lint
+        displayName: 'Frontend lint'
+        condition: succeededOrFailed()
+      - script: |
+          set -e
+          cd src/frontend
+          source $(Pipeline.Workspace)/.venv/bin/activate
+          make format-check
+        displayName: 'Frontend check format'
+        condition: succeededOrFailed()
+      - script: |
+          set -e
+          cd src/frontend
+          source $(Pipeline.Workspace)/.venv/bin/activate
+          make python-sast
+        displayName: 'Frontend sast'
+        condition: succeededOrFailed()

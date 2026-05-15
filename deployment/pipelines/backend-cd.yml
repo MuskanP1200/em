@@ -1,0 +1,97 @@
+trigger: none
+pr: none
+
+resources:
+  pipelines:
+    - pipeline: backend_ci
+      source: VO - Backend CI
+      trigger:
+        branches:
+          include:
+            - main
+
+variables:
+  CONTAINER_APP_NAME_DEV: vo-backend
+  # CONTAINER_APP_NAME_NONPROD: vo-backend-nonprod
+  CONTAINER_APP_NAME_PROD: vo-backend-prod
+  RESOURCE_GROUP_DEV: rg-centralus-vodev
+  # RESOURCE_GROUP_NONPROD: rg-centralus-lntnonprod
+  RESOURCE_GROUP_PROD: rg-centralus-voprod
+
+stages:
+  - stage: DeployDev
+    displayName: Deploy backend to dev
+    variables:
+      APP_ENVIRONMENT: sandbox
+      VAULT_URL: https://kv-centralus-vodev.vault.azure.net
+    jobs:
+    - deployment: DeployBackend
+      displayName: Deploy backend container app
+      pool: VO Pool
+      environment: VO Backend Dev
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: backend_ci
+              artifact: image-metadata
+
+            - task: AzureCLI@2
+              displayName: Update Container App image
+              inputs:
+                azureSubscription: VO - Dev ARM
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  set -e
+
+                  IMAGE="$(cat $(Pipeline.Workspace)/backend_ci/image-metadata/dev-image.txt)"
+                  echo "Deploying image: ${IMAGE}"
+
+                  az containerapp update \
+                    --name $(CONTAINER_APP_NAME_DEV) \
+                    --resource-group $(RESOURCE_GROUP_DEV) \
+                    --image "${IMAGE}" \
+                    --set-env-vars \
+                      "APP_ENVIRONMENT=$(APP_ENVIRONMENT)" \
+                      "VAULT_URL=$(VAULT_URL)" \
+
+  - stage: DeployProd
+    displayName: Deploy backend to prod
+    variables:
+      APP_ENVIRONMENT: production
+      VAULT_URL: https://kv-centralus-voprod.vault.azure.net
+      DATABRICKS_CLIENT_ID: 79499f5b-19f3-4553-a25e-5dc9aa5089dd
+    jobs:
+    - deployment: DeployBackend
+      displayName: Deploy backend container app
+      pool: VO Pool
+      environment: VO Backend Prod
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: backend_ci
+              artifact: image-metadata
+
+            - task: AzureCLI@2
+              displayName: Update Container App image
+              inputs:
+                azureSubscription: VO - Prod ARM
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  set -e
+
+                  IMAGE="$(cat $(Pipeline.Workspace)/backend_ci/image-metadata/prod-image.txt)"
+                  echo "Deploying image: ${IMAGE}"
+
+                  az containerapp update \
+                    --name $(CONTAINER_APP_NAME_PROD) \
+                    --resource-group $(RESOURCE_GROUP_PROD) \
+                    --image "${IMAGE}" \
+                    --set-env-vars \
+                      "APP_ENVIRONMENT=$(APP_ENVIRONMENT)" \
+                      "VAULT_URL=$(VAULT_URL)" \
+                      "DATABRICKS_CLIENT_ID=$(DATABRICKS_CLIENT_ID)"
+

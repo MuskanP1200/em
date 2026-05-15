@@ -1,0 +1,36 @@
+x-common-hosts: &common-hosts
+  - "artifactory-int1.corp.erac.com:10.22.8.192"
+  - "artifactory-int2.corp.erac.com:10.22.8.193"
+
+services:
+  backend:
+    build:
+      context: ../../src/
+      dockerfile: backend/Dockerfile
+      secrets: 
+        - pip_conf
+      extra_hosts: *common-hosts
+    image: vo-backend
+    ports:
+      - "8018:8018"
+    environment:
+      - "APP_ENVIRONMENT=sandbox"
+
+
+  frontend:
+    build:
+      context: ../../src/
+      dockerfile: frontend/Dockerfile
+      secrets: 
+        - pip_conf
+      extra_hosts: *common-hosts
+    image: vo-frontend
+    ports:
+      - "4200:4200"
+    environment:
+      - "APP_ENVIRONMENT=sandbox"
+      - "BACKEND_URL=http://backend:8018"
+
+secrets:
+  pip_conf:
+    file: ${PIP_CONF_PATH:-/etc/pip.conf}

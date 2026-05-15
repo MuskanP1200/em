@@ -1,0 +1,141 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/frontend/*
+      - deployment/pipelines/frontend-ci.yml
+
+pr: none
+
+variables:
+  DEV_ACR_NAME: acrcentralusvodev
+  PROD_ACR_NAME: acrcentralusvoprod
+  IMAGE_NAME: vo-frontend
+  IMAGE_TAG: $(Build.SourceVersion)
+
+  DEV_FULL_IMAGE: $(DEV_ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG)
+  PROD_FULL_IMAGE: $(PROD_ACR_NAME).azurecr.io/$(IMAGE_NAME):$(IMAGE_TAG)
+
+jobs:
+  - job: BuildAndPush
+    displayName: Build and Push frontend image
+    pool: VO Build Pool
+    workspace:
+      clean: all
+
+    steps:
+      # -  script: |
+      #     set -e
+      #     cd src/frontend
+      #     python3 -m venv $(Pipeline.Workspace)/.venv
+      #     source $(Pipeline.Workspace)/.venv/bin/activate
+      #     pip install -r requirements/requirements.txt
+      #     make test
+      #   displayName: test merged code
+      - checkout: self
+
+      - script: |
+          set -e
+
+          az login --identity --allow-no-subscriptions
+
+          docker build \
+            --platform linux/amd64 \
+            --provenance=false \
+            --secret id=pip_conf,src=/etc/pip.conf \
+            --add-host artifactory-int1.corp.erac.com:10.22.8.192 \
+            --add-host artifactory-int2.corp.erac.com:10.22.8.193 \
+            -f src/frontend/Dockerfile \
+            -t $(DEV_FULL_IMAGE) \
+            -t $(PROD_FULL_IMAGE) \
+            src
+
+          echo "Built image with tags:"
+          echo "$(DEV_FULL_IMAGE)"
+          echo $(PROD_FULL_IMAGE)
+        displayName: Build frontend image
+      
+      - task: AzureCLI@2
+        displayName: Push image to Dev ACR
+        inputs:
+          azureSubscription: VO - Dev ARM
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            set -e
+
+            az acr login --name $(DEV_ACR_NAME)
+
+            docker push $(DEV_FULL_IMAGE)
+
+            echo "Pushed Dev image:"
+            echo "$(DEV_FULL_IMAGE)"
+
+      - task: AzureCLI@2
+        displayName: Push image to Prod ACR
+        inputs:
+          azureSubscription: VO - Prod ARM
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            set -e
+
+            az acr login --name $(PROD_ACR_NAME)
+
+            docker push $(PROD_FULL_IMAGE)
+
+            echo "Pushed Prod image:"
+            echo "$(PROD_FULL_IMAGE)"
+
+      - script: |
+          set -e
+
+          mkdir -p $(Pipeline.Workspace)/image-metadata
+
+          echo "$(DEV_FULL_IMAGE)" > $(Pipeline.Workspace)/image-metadata/dev-image.txt
+          echo "$(PROD_FULL_IMAGE)" > $(Pipeline.Workspace)/image-metadata/prod-image.txt
+          echo "$(IMAGE_TAG)" > $(Pipeline.Workspace)/image-metadata/tag.txt
+
+          echo "Image metadata generated:"
+          cat $(Pipeline.Workspace)/image-metadata/dev-image.txt
+          cat $(Pipeline.Workspace)/image-metadata/prod-image.txt
+          cat $(Pipeline.Workspace)/image-metadata/tag.txt
+        displayName: Generate image metadata
+      
+      - task: PublishPipelineArtifact@1
+        displayName: Publish image metadata
+        inputs:
+          targetPath: '$(Pipeline.Workspace)/image-metadata'
+          artifact: 'image-metadata'
+          publishLocation: 'pipeline'
+
+      - script: |
+          set +e
+
+          echo "Docker disk usage before cleanup:"
+          docker system df || true
+
+          echo "Removing local image tags from this build..."
+          docker image rm $(DEV_FULL_IMAGE) || true
+          docker image rm $(PROD_FULL_IMAGE) || true
+
+          echo "Pruning unused Docker containers, images, and build cache...."
+          docker container prune -f || true
+          docker image prune -af || true
+          docker builder prune -af || true
+
+          echo "Docker disk usage after cleanup:"
+          docker system df || true
+
+        displayName: Cleanup local Docker images and build cache
+        condition: always()
+
+
+
+
+
+
+
+
