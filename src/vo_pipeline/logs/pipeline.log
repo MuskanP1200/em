@@ -1,0 +1,347 @@
+2026-05-15T10:31:04 | INFO     | vo-backend | pipeline_orchestrator | reset_staging_tables=true — dropping and recreating staging tables.
+2026-05-15T10:31:04 | INFO     | vo-backend | api_ingest.db_staging | Dropped staging tables: ['backup_api_est_imgs', 'backup_api_est_line', 'backup_api_est_subtot']
+2026-05-15T10:31:04 | DEBUG    | vo-backend | api_ingest.db_staging | Staging tables ensured.
+2026-05-15T10:31:04 | INFO     | vo-backend | pipeline_orchestrator | reset_output_tables=true — dropping and recreating output tables.
+2026-05-15T10:31:04 | INFO     | vo-backend | estimate_matching.db_writer | Dropped EM output tables: ['backup_api_em_est_summary', 'backup_api_em_est_subtot_dtl', 'backup_api_em_est_line_dtl', 'backup_api_est_overall_results']
+2026-05-15T10:31:04 | INFO     | vo-backend | pipeline_orchestrator | === Step 1: API ingestion ===
+2026-05-15T10:31:04 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | === API ingest pipeline start ===
+2026-05-15T10:31:04 | DEBUG    | vo-backend | api_ingest.db_staging | Staging tables ensured.
+2026-05-15T10:31:04 | INFO     | vo-backend | api_ingest.api_auth | Requesting AppSec token...
+2026-05-15T10:31:04 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | Token acquired.
+2026-05-15T10:31:13 | INFO     | vo-backend | api_ingest.estimate_client | SearchEstimates page start_row=1 → 50 items (total so far: 50)
+2026-05-15T10:31:13 | INFO     | vo-backend | api_ingest.estimate_client | SearchEstimates complete: 40 estimates
+2026-05-15T10:31:13 | INFO     | vo-backend | api_ingest.estimate_loader | Inserted 40 new rows into container.backup_api_est_imgs (0 already existed)
+2026-05-15T10:31:13 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | 40 new estimate(s) to process.
+2026-05-15T10:31:13 | INFO     | vo-backend | api_ingest.estimate_loader | Loading 40 estimates from API (max_workers=5, save_sql=True)
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_client | CDR rates vendor=5034733 group=09: bdy=203 mech=150.0 frm=None dom_disc=None
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385643: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385641: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385710: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385712: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385642: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385850: 0 lines, 0 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_client | CDR rates vendor=201 group=C1: bdy=0 mech=None frm=None dom_disc=None
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385610: 1 lines, 3 subtotals, CDR bdy_rate=None
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385611: 1 lines, 3 subtotals, CDR bdy_rate=None
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385435: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:14 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385438: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385433: 1 lines, 3 subtotals, CDR bdy_rate=None
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385432: 1 lines, 1 subtotals, CDR bdy_rate=None
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385356: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385353: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385354: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385575: 0 lines, 0 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385325: 1 lines, 1 subtotals, CDR bdy_rate=None
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385291: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385153: 1 lines, 4 subtotals, CDR bdy_rate=None
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385150: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385152: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_client | repair_incident_id=3000015165: damage_description='Hood : Chip-chop'
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_client | CDR rates vendor=5006892 group=58: bdy=56 mech=55.55 frm=55.55 dom_disc=2.0
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385149: 3 lines, 9 subtotals, CDR bdy_rate=55.55
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_client | repair_incident_id=3000015165: damage_description='Hood : Chip-chop'
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385146: 2 lines, 3 subtotals, CDR bdy_rate=55.55
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_client | repair_incident_id=3000015165: damage_description='Hood : Chip-chop'
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385148: 3 lines, 8 subtotals, CDR bdy_rate=55.55
+2026-05-15T10:31:16 | DEBUG    | vo-backend | api_ingest.estimate_client | repair_incident_id=3000015165: damage_description='Hood : Chip-chop'
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385145: 1 lines, 3 subtotals, CDR bdy_rate=55.55
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385084: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385083: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385294: 0 lines, 0 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385082: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000384886: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000384888: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000384884: 1 lines, 3 subtotals, CDR bdy_rate=None
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000384826: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000384824: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000384822: 2 lines, 12 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000385029: 0 lines, 0 subtotals, CDR bdy_rate=203.0
+2026-05-15T10:31:17 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000384673: 1 lines, 1 subtotals, CDR bdy_rate=None
+2026-05-15T10:31:18 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000384667: 1 lines, 4 subtotals, CDR bdy_rate=None
+2026-05-15T10:31:18 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000384658: 1 lines, 1 subtotals, CDR bdy_rate=None
+2026-05-15T10:31:18 | DEBUG    | vo-backend | api_ingest.estimate_loader | est_id 3000384643: 1 lines, 4 subtotals, CDR bdy_rate=None
+2026-05-15T10:31:18 | INFO     | vo-backend | api_ingest.estimate_loader | API load complete: 62 line rows, 303 subtotal rows, 36 unique est_ids
+2026-05-15T10:31:18 | INFO     | vo-backend | api_ingest.estimate_loader | Saved est_line_df to container.backup_api_est_line
+2026-05-15T10:31:18 | INFO     | vo-backend | api_ingest.estimate_loader | Saved subtot_df to container.backup_api_est_subtot
+2026-05-15T10:31:18 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | Estimate data loaded: 62 line rows, 303 subtotal rows.
+2026-05-15T10:31:18 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385710.
+2026-05-15T10:31:18 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385710: 0 image(s) uploaded to blob.
+2026-05-15T10:31:18 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385712.
+2026-05-15T10:31:18 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385712: 0 image(s) uploaded to blob.
+2026-05-15T10:31:18 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385643/testPdf.pdf
+2026-05-15T10:31:18 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385643: 1 image(s) uploaded to blob.
+2026-05-15T10:31:19 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385642/testPdf.pdf
+2026-05-15T10:31:19 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385642: 1 image(s) uploaded to blob.
+2026-05-15T10:31:19 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385641/testPdf.pdf
+2026-05-15T10:31:19 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385641: 1 image(s) uploaded to blob.
+2026-05-15T10:31:19 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385611.
+2026-05-15T10:31:19 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385611: 0 image(s) uploaded to blob.
+2026-05-15T10:31:19 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385610.
+2026-05-15T10:31:19 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385610: 0 image(s) uploaded to blob.
+2026-05-15T10:31:19 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385850/testPdf.pdf
+2026-05-15T10:31:19 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385850: 1 image(s) uploaded to blob.
+2026-05-15T10:31:19 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385438.
+2026-05-15T10:31:19 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385438: 0 image(s) uploaded to blob.
+2026-05-15T10:31:19 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385435.
+2026-05-15T10:31:19 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385435: 0 image(s) uploaded to blob.
+2026-05-15T10:31:20 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385433.
+2026-05-15T10:31:20 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385433: 0 image(s) uploaded to blob.
+2026-05-15T10:31:20 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385432.
+2026-05-15T10:31:20 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385432: 0 image(s) uploaded to blob.
+2026-05-15T10:31:20 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385356/testPdf.pdf
+2026-05-15T10:31:20 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385356: 1 image(s) uploaded to blob.
+2026-05-15T10:31:20 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385354/testPdf.pdf
+2026-05-15T10:31:20 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385354: 1 image(s) uploaded to blob.
+2026-05-15T10:31:20 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385353/testPdf.pdf
+2026-05-15T10:31:20 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385353: 1 image(s) uploaded to blob.
+2026-05-15T10:31:20 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385325.
+2026-05-15T10:31:20 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385325: 0 image(s) uploaded to blob.
+2026-05-15T10:31:21 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385575/testPdf.pdf
+2026-05-15T10:31:21 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385575: 1 image(s) uploaded to blob.
+2026-05-15T10:31:21 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385291.
+2026-05-15T10:31:21 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385291: 0 image(s) uploaded to blob.
+2026-05-15T10:31:21 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385153.
+2026-05-15T10:31:21 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385153: 0 image(s) uploaded to blob.
+2026-05-15T10:31:21 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385150.
+2026-05-15T10:31:21 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385150: 0 image(s) uploaded to blob.
+2026-05-15T10:31:21 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385152.
+2026-05-15T10:31:21 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385152: 0 image(s) uploaded to blob.
+2026-05-15T10:31:21 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385149.
+2026-05-15T10:31:21 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385149: 0 image(s) uploaded to blob.
+2026-05-15T10:31:21 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385148.
+2026-05-15T10:31:21 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385148: 0 image(s) uploaded to blob.
+2026-05-15T10:31:21 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385146.
+2026-05-15T10:31:21 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385146: 0 image(s) uploaded to blob.
+2026-05-15T10:31:21 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000385145.
+2026-05-15T10:31:21 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385145: 0 image(s) uploaded to blob.
+2026-05-15T10:31:21 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385084/testPdf.pdf
+2026-05-15T10:31:21 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385084: 1 image(s) uploaded to blob.
+2026-05-15T10:31:22 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385083/testPdf.pdf
+2026-05-15T10:31:22 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385083: 1 image(s) uploaded to blob.
+2026-05-15T10:31:22 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385082/testPdf.pdf
+2026-05-15T10:31:22 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385082: 1 image(s) uploaded to blob.
+2026-05-15T10:31:22 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385294/testPdf.pdf
+2026-05-15T10:31:22 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385294: 1 image(s) uploaded to blob.
+2026-05-15T10:31:22 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000384886.
+2026-05-15T10:31:22 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000384886: 0 image(s) uploaded to blob.
+2026-05-15T10:31:22 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000384888.
+2026-05-15T10:31:22 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000384888: 0 image(s) uploaded to blob.
+2026-05-15T10:31:22 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000384884.
+2026-05-15T10:31:22 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000384884: 0 image(s) uploaded to blob.
+2026-05-15T10:31:23 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000384826/testPdf.pdf
+2026-05-15T10:31:23 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000384826: 1 image(s) uploaded to blob.
+2026-05-15T10:31:23 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000384824/testPdf.pdf
+2026-05-15T10:31:23 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000384824: 1 image(s) uploaded to blob.
+2026-05-15T10:31:23 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000384822/testPdf.pdf
+2026-05-15T10:31:23 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000384822: 1 image(s) uploaded to blob.
+2026-05-15T10:31:23 | INFO     | vo-backend | storage | Uploaded blob: https://storagecentralusvodev.blob.core.windows.net/api-images/EST3000385029/testPdf.pdf
+2026-05-15T10:31:23 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000385029: 1 image(s) uploaded to blob.
+2026-05-15T10:31:23 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000384673.
+2026-05-15T10:31:23 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000384673: 0 image(s) uploaded to blob.
+2026-05-15T10:31:23 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000384667.
+2026-05-15T10:31:23 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000384667: 0 image(s) uploaded to blob.
+2026-05-15T10:31:23 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000384658.
+2026-05-15T10:31:23 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000384658: 0 image(s) uploaded to blob.
+2026-05-15T10:31:23 | WARNING  | vo-backend | api_ingest.image_loader | No attachments found for est_id=3000384643.
+2026-05-15T10:31:23 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | est_id 3000384643: 0 image(s) uploaded to blob.
+2026-05-15T10:31:24 | INFO     | vo-backend | api_ingest.api_ingestion_pipeline | === API ingest pipeline complete ===
+2026-05-15T10:31:24 | INFO     | vo-backend | pipeline_orchestrator | Ingested 40 new estimate(s).
+2026-05-15T10:31:24 | INFO     | vo-backend | vi_pipeline.folder.EST3000385710/ | START folder=EST3000385710 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:24 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385710/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.004s | db_write=ok
+2026-05-15T10:31:24 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385710    0.2s
+2026-05-15T10:31:24 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385710: no parts lines — skipping LLM.
+2026-05-15T10:31:24 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385710    0.1s
+2026-05-15T10:31:24 | INFO     | vo-backend | vi_pipeline.folder.EST3000385712/ | START folder=EST3000385712 (VIN=KMHDH4AE0GU474850, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:24 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385712/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:24 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385712    0.1s
+2026-05-15T10:31:24 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385712: no parts lines — skipping LLM.
+2026-05-15T10:31:24 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385712    0.1s
+2026-05-15T10:31:24 | INFO     | vo-backend | vi_pipeline.folder.EST3000385643/ | START folder=EST3000385643 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:24 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385643/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:24 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385643    0.1s
+2026-05-15T10:31:24 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385643: no parts lines — skipping LLM.
+2026-05-15T10:31:24 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385643    0.1s
+2026-05-15T10:31:24 | INFO     | vo-backend | vi_pipeline.folder.EST3000385642/ | START folder=EST3000385642 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:24 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385642/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:24 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385642    0.1s
+2026-05-15T10:31:24 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385642: no parts lines — skipping LLM.
+2026-05-15T10:31:24 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385642    0.1s
+2026-05-15T10:31:25 | INFO     | vo-backend | vi_pipeline.folder.EST3000385641/ | START folder=EST3000385641 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:25 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385641/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:25 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385641    0.1s
+2026-05-15T10:31:25 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385641: no parts lines — skipping LLM.
+2026-05-15T10:31:25 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385641    0.1s
+2026-05-15T10:31:25 | INFO     | vo-backend | vi_pipeline.folder.EST3000385611/ | START folder=EST3000385611 (VIN=3KPA24AD6NE445459, License Plate=N/A, Odometer=9869.0)
+2026-05-15T10:31:25 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385611/ | vin_status=False | plate_status=None | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:25 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385611    0.1s
+2026-05-15T10:31:25 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385611: no parts lines — skipping LLM.
+2026-05-15T10:31:25 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385611    0.1s
+2026-05-15T10:31:25 | INFO     | vo-backend | vi_pipeline.folder.EST3000385610/ | START folder=EST3000385610 (VIN=7N55K5, License Plate=TEMP, Odometer=9869.0)
+2026-05-15T10:31:25 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385610/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:25 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385610    0.2s
+2026-05-15T10:31:25 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385610: no parts lines — skipping LLM.
+2026-05-15T10:31:25 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385610    0.1s
+2026-05-15T10:31:25 | ERROR    | vo-backend | vi_pipeline | est_id=3000385850 has an empty blob prefix — nothing to process.
+2026-05-15T10:31:25 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385850    0.0s
+2026-05-15T10:31:25 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385850: no parts lines — skipping LLM.
+2026-05-15T10:31:25 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385850    0.0s
+2026-05-15T10:31:25 | INFO     | vo-backend | vi_pipeline.folder.EST3000385438/ | START folder=EST3000385438 (VIN=KMHDH4AE0GU474850, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:25 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385438/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:25 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385438    0.1s
+2026-05-15T10:31:25 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385438: no parts lines — skipping LLM.
+2026-05-15T10:31:25 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385438    0.1s
+2026-05-15T10:31:26 | INFO     | vo-backend | vi_pipeline.folder.EST3000385435/ | START folder=EST3000385435 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:26 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385435/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:26 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385435    0.1s
+2026-05-15T10:31:26 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385435: no parts lines — skipping LLM.
+2026-05-15T10:31:26 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385435    0.1s
+2026-05-15T10:31:26 | INFO     | vo-backend | vi_pipeline.folder.EST3000385433/ | START folder=EST3000385433 (VIN=KNDEUCAA4T7289348, License Plate=TEMP, Odometer=9869.0)
+2026-05-15T10:31:26 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385433/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:26 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385433    0.1s
+2026-05-15T10:31:26 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385433: no parts lines — skipping LLM.
+2026-05-15T10:31:26 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385433    0.0s
+2026-05-15T10:31:26 | INFO     | vo-backend | vi_pipeline.folder.EST3000385432/ | START folder=EST3000385432 (VIN=KNDEUCAA8T7144751, License Plate=TEMP, Odometer=9869.0)
+2026-05-15T10:31:26 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385432/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:26 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385432    0.1s
+2026-05-15T10:31:26 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385432: no parts lines — skipping LLM.
+2026-05-15T10:31:26 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385432    0.0s
+2026-05-15T10:31:26 | INFO     | vo-backend | vi_pipeline.folder.EST3000385356/ | START folder=EST3000385356 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:26 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385356/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:26 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385356    0.1s
+2026-05-15T10:31:26 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385356: no parts lines — skipping LLM.
+2026-05-15T10:31:26 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385356    0.1s
+2026-05-15T10:31:26 | INFO     | vo-backend | vi_pipeline.folder.EST3000385354/ | START folder=EST3000385354 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:26 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385354/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:26 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385354    0.1s
+2026-05-15T10:31:26 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385354: no parts lines — skipping LLM.
+2026-05-15T10:31:26 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385354    0.1s
+2026-05-15T10:31:27 | INFO     | vo-backend | vi_pipeline.folder.EST3000385353/ | START folder=EST3000385353 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:27 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385353/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:27 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385353    0.2s
+2026-05-15T10:31:27 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385353: no parts lines — skipping LLM.
+2026-05-15T10:31:27 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385353    0.1s
+2026-05-15T10:31:27 | INFO     | vo-backend | vi_pipeline.folder.EST3000385325/ | START folder=EST3000385325 (VIN=KNDEUCAA8T7529825, License Plate=TEMP, Odometer=9869.0)
+2026-05-15T10:31:27 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385325/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:27 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385325    0.1s
+2026-05-15T10:31:27 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385325: no parts lines — skipping LLM.
+2026-05-15T10:31:27 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385325    0.0s
+2026-05-15T10:31:27 | ERROR    | vo-backend | vi_pipeline | est_id=3000385575 has an empty blob prefix — nothing to process.
+2026-05-15T10:31:27 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385575    0.0s
+2026-05-15T10:31:27 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385575: no parts lines — skipping LLM.
+2026-05-15T10:31:27 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385575    0.0s
+2026-05-15T10:31:27 | INFO     | vo-backend | vi_pipeline.folder.EST3000385291/ | START folder=EST3000385291 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:27 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385291/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:27 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385291    0.1s
+2026-05-15T10:31:27 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385291: no parts lines — skipping LLM.
+2026-05-15T10:31:27 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385291    0.1s
+2026-05-15T10:31:27 | INFO     | vo-backend | vi_pipeline.folder.EST3000385153/ | START folder=EST3000385153 (VIN=KNDEUCAA5T7117877, License Plate=TEMP, Odometer=9869.0)
+2026-05-15T10:31:27 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385153/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:27 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385153    0.1s
+2026-05-15T10:31:29 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385153    1.5s
+2026-05-15T10:31:29 | INFO     | vo-backend | vi_pipeline.folder.EST3000385150/ | START folder=EST3000385150 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:29 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385150/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:29 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385150    0.3s
+2026-05-15T10:31:29 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385150: no parts lines — skipping LLM.
+2026-05-15T10:31:29 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385150    0.1s
+2026-05-15T10:31:29 | INFO     | vo-backend | vi_pipeline.folder.EST3000385152/ | START folder=EST3000385152 (VIN=KMHDH4AE0GU474850, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:29 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385152/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:29 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385152    0.2s
+2026-05-15T10:31:29 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385152: no parts lines — skipping LLM.
+2026-05-15T10:31:29 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385152    0.1s
+2026-05-15T10:31:29 | INFO     | vo-backend | vi_pipeline.folder.EST3000385149/ | START folder=EST3000385149 (VIN=2G1WF5EKXB1234100, License Plate=Test, Odometer=9869.0)
+2026-05-15T10:31:29 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385149/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:29 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385149    0.1s
+2026-05-15T10:31:31 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385149    1.7s
+2026-05-15T10:31:31 | INFO     | vo-backend | vi_pipeline.folder.EST3000385148/ | START folder=EST3000385148 (VIN=2G1WF5EKXB1234100, License Plate=Test, Odometer=9869.0)
+2026-05-15T10:31:31 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385148/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:31 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385148    0.1s
+2026-05-15T10:31:33 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385148    1.8s
+2026-05-15T10:31:33 | INFO     | vo-backend | vi_pipeline.folder.EST3000385146/ | START folder=EST3000385146 (VIN=2G1WF5EKXB1234100, License Plate=Test, Odometer=9869.0)
+2026-05-15T10:31:33 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385146/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:33 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385146    0.1s
+2026-05-15T10:31:33 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385146: no parts lines — skipping LLM.
+2026-05-15T10:31:33 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385146    0.1s
+2026-05-15T10:31:34 | INFO     | vo-backend | vi_pipeline.folder.EST3000385145/ | START folder=EST3000385145 (VIN=2G1WF5EKXB1234100, License Plate=Test, Odometer=9869.0)
+2026-05-15T10:31:34 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385145/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:34 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385145    0.2s
+2026-05-15T10:31:34 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385145: no parts lines — skipping LLM.
+2026-05-15T10:31:34 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385145    0.1s
+2026-05-15T10:31:34 | INFO     | vo-backend | vi_pipeline.folder.EST3000385084/ | START folder=EST3000385084 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:34 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385084/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:34 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385084    0.1s
+2026-05-15T10:31:34 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385084: no parts lines — skipping LLM.
+2026-05-15T10:31:34 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385084    0.1s
+2026-05-15T10:31:34 | INFO     | vo-backend | vi_pipeline.folder.EST3000385083/ | START folder=EST3000385083 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:34 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385083/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:34 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385083    0.2s
+2026-05-15T10:31:34 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385083: no parts lines — skipping LLM.
+2026-05-15T10:31:34 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385083    0.1s
+2026-05-15T10:31:34 | INFO     | vo-backend | vi_pipeline.folder.EST3000385082/ | START folder=EST3000385082 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:34 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000385082/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:34 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385082    0.1s
+2026-05-15T10:31:34 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385082: no parts lines — skipping LLM.
+2026-05-15T10:31:34 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385082    0.1s
+2026-05-15T10:31:34 | ERROR    | vo-backend | vi_pipeline | est_id=3000385294 has an empty blob prefix — nothing to process.
+2026-05-15T10:31:34 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385294    0.0s
+2026-05-15T10:31:34 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385294: no parts lines — skipping LLM.
+2026-05-15T10:31:34 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385294    0.0s
+2026-05-15T10:31:34 | INFO     | vo-backend | vi_pipeline.folder.EST3000384886/ | START folder=EST3000384886 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:34 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000384886/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:34 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000384886    0.1s
+2026-05-15T10:31:34 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000384886: no parts lines — skipping LLM.
+2026-05-15T10:31:35 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000384886    0.1s
+2026-05-15T10:31:35 | INFO     | vo-backend | vi_pipeline.folder.EST3000384888/ | START folder=EST3000384888 (VIN=KMHDH4AE0GU474850, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:35 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000384888/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:35 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000384888    0.1s
+2026-05-15T10:31:35 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000384888: no parts lines — skipping LLM.
+2026-05-15T10:31:35 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000384888    0.1s
+2026-05-15T10:31:35 | INFO     | vo-backend | vi_pipeline.folder.EST3000384884/ | START folder=EST3000384884 (VIN=KNDEUCAA9T7333876, License Plate=TEMP, Odometer=9869.0)
+2026-05-15T10:31:35 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000384884/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:35 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000384884    0.1s
+2026-05-15T10:31:35 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000384884: no parts lines — skipping LLM.
+2026-05-15T10:31:35 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000384884    0.1s
+2026-05-15T10:31:35 | INFO     | vo-backend | vi_pipeline.folder.EST3000384826/ | START folder=EST3000384826 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:35 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000384826/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:35 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000384826    0.1s
+2026-05-15T10:31:35 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000384826: no parts lines — skipping LLM.
+2026-05-15T10:31:35 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000384826    0.1s
+2026-05-15T10:31:35 | INFO     | vo-backend | vi_pipeline.folder.EST3000384824/ | START folder=EST3000384824 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:35 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000384824/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:35 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000384824    0.1s
+2026-05-15T10:31:35 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000384824: no parts lines — skipping LLM.
+2026-05-15T10:31:35 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000384824    0.1s
+2026-05-15T10:31:35 | INFO     | vo-backend | vi_pipeline.folder.EST3000384822/ | START folder=EST3000384822 (VIN=1HTMMAAL8CH539639, License Plate=34B3HF, Odometer=9869.0)
+2026-05-15T10:31:35 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000384822/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:35 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000384822    0.1s
+2026-05-15T10:31:35 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000384822: no parts lines — skipping LLM.
+2026-05-15T10:31:36 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000384822    0.1s
+2026-05-15T10:31:36 | ERROR    | vo-backend | vi_pipeline | est_id=3000385029 has an empty blob prefix — nothing to process.
+2026-05-15T10:31:36 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000385029    0.0s
+2026-05-15T10:31:36 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000385029: no parts lines — skipping LLM.
+2026-05-15T10:31:36 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000385029    0.0s
+2026-05-15T10:31:36 | INFO     | vo-backend | vi_pipeline.folder.EST3000384673/ | START folder=EST3000384673 (VIN=1GYFZCR48RF721663, License Plate=TEMP, Odometer=9869.0)
+2026-05-15T10:31:36 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000384673/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:36 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000384673    0.1s
+2026-05-15T10:31:36 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000384673: no parts lines — skipping LLM.
+2026-05-15T10:31:36 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000384673    0.0s
+2026-05-15T10:31:36 | INFO     | vo-backend | vi_pipeline.folder.EST3000384667/ | START folder=EST3000384667 (VIN=1GYFZCR48RF721663, License Plate=TEMP, Odometer=9869.0)
+2026-05-15T10:31:36 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000384667/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:36 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000384667    0.1s
+2026-05-15T10:31:37 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000384667    1.2s
+2026-05-15T10:31:37 | INFO     | vo-backend | vi_pipeline.folder.EST3000384658/ | START folder=EST3000384658 (VIN=1GYFZCR48RF109589, License Plate=TEMP, Odometer=9869.0)
+2026-05-15T10:31:37 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000384658/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:37 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000384658    0.1s
+2026-05-15T10:31:37 | INFO     | vo-backend | estimate_matching.em_pipeline | est_id 3000384658: no parts lines — skipping LLM.
+2026-05-15T10:31:37 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000384658    0.0s
+2026-05-15T10:31:37 | INFO     | vo-backend | vi_pipeline.folder.EST3000384643/ | START folder=EST3000384643 (VIN=1GYFZCR48RF109589, License Plate=TEMP, Odometer=9869.0)
+2026-05-15T10:31:37 | INFO     | vo-backend | vi_pipeline | Finished: prefix=EST3000384643/ | vin_status=False | plate_status=False | odometer_status=False | ocr_images=0 | vlm_images=0 | wall_sec=0.000s | db_write=ok
+2026-05-15T10:31:37 | INFO     | vo-backend | pipeline_orchestrator | VI  ✓ est_id=3000384643    0.1s
+2026-05-15T10:31:39 | INFO     | vo-backend | pipeline_orchestrator | EM  ✓ est_id=3000384643    1.9s
+2026-05-15T10:31:39 | INFO     | vo-backend | pipeline_orchestrator | === Step 4: Enriching EM summary with VI results ===
+2026-05-15T10:31:39 | INFO     | vo-backend | pipeline_orchestrator | Overall summary written to container.backup_api_est_overall_results (36 rows).
+2026-05-15T10:31:39 | INFO     | vo-backend | pipeline_orchestrator | ============================================================
+PIPELINE COMPLETE  35.9s
+  estimates : 40
+  VI  : 40 ok  0 failed
+  EM  : 40 ok  0 failed
+============================================================
