@@ -36,7 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from api_logging.config_logging import configure_logging
+from api_logging.config_logging import configure_logging, current_est_id
 from settings import get_settings
 
 settings = get_settings()
@@ -112,34 +112,34 @@ def run_pipeline():
     client = create_llm_client() if RUN_EM else None
 
     for est_id in est_ids[:1000]:
-        est_rows = est_line_df[est_line_df["est_id"] == int(est_id)]
-        subtot_rows = subtot_df[subtot_df["est_id"] == int(est_id)]
+        token = current_est_id.set(str(est_id))
+        try:
+            est_rows = est_line_df[est_line_df["est_id"] == int(est_id)]
+            subtot_rows = subtot_df[subtot_df["est_id"] == int(est_id)]
 
-        # ── Step 2: Vehicle verification ──────────────────────────────────────
-        if RUN_VI:
-            t = time.perf_counter()
-            try:
-                run_vi_pipeline(est_id)
-                logger.info(
-                    "VI  ✓ est_id=%-12s  %.1fs", est_id, time.perf_counter() - t
-                )
-                vi_ok += 1
-            except Exception as e:
-                logger.error("VI  ✗ est_id=%-12s  %s", est_id, e, exc_info=True)
-                vi_fail += 1
+            # ── Step 2: Vehicle verification ──────────────────────────────────────
+            if RUN_VI:
+                t = time.perf_counter()
+                try:
+                    run_vi_pipeline(est_id)
+                    logger.info("VI  ✓  %.1fs", time.perf_counter() - t)
+                    vi_ok += 1
+                except Exception as e:
+                    logger.error("VI  ✗  %s", e, exc_info=True)
+                    vi_fail += 1
 
-        # ── Step 3: Estimate matching ─────────────────────────────────────────
-        if RUN_EM:
-            t = time.perf_counter()
-            try:
-                run_em_pipeline(est_id, est_rows, subtot_rows, client)
-                logger.info(
-                    "EM  ✓ est_id=%-12s  %.1fs", est_id, time.perf_counter() - t
-                )
-                em_ok += 1
-            except Exception as e:
-                logger.error("EM  ✗ est_id=%-12s  %s", est_id, e, exc_info=True)
-                em_fail += 1
+            # ── Step 3: Estimate matching ─────────────────────────────────────────
+            if RUN_EM:
+                t = time.perf_counter()
+                try:
+                    run_em_pipeline(est_id, est_rows, subtot_rows, client)
+                    logger.info("EM  ✓  %.1fs", time.perf_counter() - t)
+                    em_ok += 1
+                except Exception as e:
+                    logger.error("EM  ✗  %s", e, exc_info=True)
+                    em_fail += 1
+        finally:
+            current_est_id.reset(token)
 
     # ── Step 4: Enrich EM summary with VI results ─────────────────────────────
     if RUN_VI and RUN_EM:
