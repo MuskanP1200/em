@@ -1,6 +1,7 @@
 import yaml
 import logging
 import logging.config
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Union
 
@@ -11,6 +12,8 @@ except ImportError:
 
 settings = get_settings()
 
+current_est_id: ContextVar[str] = ContextVar("est_id", default="-")
+
 
 class AppNameFilter(logging.Filter):
     def __init__(self, app_name: str):
@@ -19,6 +22,12 @@ class AppNameFilter(logging.Filter):
 
     def filter(self, record):
         record.app_name_field = self.app_name
+        return True
+
+
+class EstIdFilter(logging.Filter):
+    def filter(self, record):
+        record.est_id = current_est_id.get()
         return True
 
 
@@ -43,8 +52,10 @@ def configure_logging(
     logging.config.dictConfig(config_from_file)
 
     app_filter = AppNameFilter(settings.APP_NAME)
+    est_id_filter = EstIdFilter()
     for handler in logging.root.handlers:
         handler.addFilter(app_filter)
+        handler.addFilter(est_id_filter)
 
     root_logger = logging.getLogger()
 
