@@ -17,14 +17,14 @@ from storage import (
     azure_folder_url,
     download_blob_bytes,
 )
-from matching import (
+from vehicle_verification.matching import (
     find_best_match,
     calculate_edit_distance,
     is_one_char_checksum_substitution_match,
 )
-from ocr import ocr_image_bytes
-from vlm_classifier import classify_image_in_memory
-from utils import (
+from vehicle_verification.ocr import ocr_image_bytes
+from vehicle_verification.vlm_classifier import classify_image_in_memory
+from vehicle_verification.utils import (
     is_image_name,
     is_pdf_name,
     is_thumbnail_name,
@@ -180,34 +180,35 @@ def _match_vin(
     }
 
     # --- OCR path ---
-    norm_ocr = normalize_for_vin_match(ocr_text)
-    best_ocr = find_best_match(norm_ocr, target_vin)
-    ocr_mismatch = calculate_edit_distance(best_ocr, target_vin)
-    ocr_match = best_ocr == target_vin
-    ocr_hit = ocr_match
+    if target_vin is not None:
+        norm_ocr = normalize_for_vin_match(ocr_text)
+        best_ocr = find_best_match(norm_ocr, target_vin)
+        ocr_mismatch = calculate_edit_distance(best_ocr, target_vin)
+        ocr_match = best_ocr == target_vin
+        ocr_hit = ocr_match
 
-    ocr_promoted = False
-    ocr_pos = None
-    if ocr_mismatch == 1:
-        ok, pos = is_one_char_checksum_substitution_match(best_ocr, target_vin)
-        if ok:
-            ocr_promoted, ocr_pos = True, pos
-            ocr_match = True
-            ocr_mismatch = 0
-            best_ocr = target_vin
-            ocr_hit = True
+        ocr_promoted = False
+        ocr_pos = None
+        if ocr_mismatch == 1:
+            ok, pos = is_one_char_checksum_substitution_match(best_ocr, target_vin)
+            if ok:
+                ocr_promoted, ocr_pos = True, pos
+                ocr_match = True
+                ocr_mismatch = 0
+                best_ocr = target_vin
+                ocr_hit = True
 
-    result.update(
-        vin_ocr_match=ocr_match,
-        best_match_vin_ocr=best_ocr,
-        ocr_mismatch=ocr_mismatch,
-        ocr_promoted=ocr_promoted,
-        ocr_pos=ocr_pos,
-        ocr_hit=ocr_hit,
-    )
+        result.update(
+            vin_ocr_match=ocr_match,
+            best_match_vin_ocr=best_ocr,
+            ocr_mismatch=ocr_mismatch,
+            ocr_promoted=ocr_promoted,
+            ocr_pos=ocr_pos,
+            ocr_hit=ocr_hit,
+        )
 
     # --- VLM path ---
-    if vlm_text:
+    if vlm_text and target_vin is not None:
         norm_vlm = normalize_for_vin_match(vlm_text)
         best_vlm = find_best_match(norm_vlm, target_vin)
         vlm_mismatch = calculate_edit_distance(best_vlm, target_vin)
@@ -235,12 +236,13 @@ def _match_vin(
         )
 
     # --- Best across sources ---
-    candidates = [(result["ocr_mismatch"], result["best_match_vin_ocr"])]
+    candidates = []
+    if result["ocr_mismatch"] is not None:
+        candidates.append((result["ocr_mismatch"], result["best_match_vin_ocr"]))
     if result["vlm_mismatch"] is not None:
         candidates.append((result["vlm_mismatch"], result["best_match_vin_vlm"]))
-    non_none = [(m, c) for m, c in candidates if m is not None]
-    if non_none:
-        best = min(non_none, key=lambda x: x[0])
+    if candidates:
+        best = min(candidates, key=lambda x: x[0])
         result["img_best_mismatch"] = best[0]
         result["img_best_candidate"] = best[1]
 
@@ -270,9 +272,9 @@ def _match_plate(
     }
 
     # --- OCR path ---
-    norm_ocr = normalize_for_vin_match(ocr_text)
-    best_ocr = find_best_match(norm_ocr, target_plate)
     if target_plate is not None:
+        norm_ocr = normalize_for_vin_match(ocr_text)
+        best_ocr = find_best_match(norm_ocr, target_plate)
         ocr_mismatch = calculate_edit_distance(best_ocr, target_plate)
         ocr_match = best_ocr == target_plate
         result.update(
