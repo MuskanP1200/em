@@ -204,8 +204,8 @@ estimate_matching:
       - finding
     labor_audit:
       - lbr_typ_hrs_match
-      - unit_cost_based_lbr_dsc
-      - calc_unit_cost
+      - expected_lbr_rate
+      - actual_lbr_rate
       - lbr_typ_unit_cost_match
       - overall_lbr_match
       - overcharged
@@ -271,11 +271,12 @@ estimate_matching:
     decimals: 1
 
   labor_type_rate_map:
-    "Labor - Body":       bdy_lbr_rate
-    "Labor - Mechanical": mchncl_lbr_rate
-    "Labor - Frame":      frm_lbr_rate
-    "Labor - Refinish":   bdy_lbr_rate
-    "Labor - Structural": frm_lbr_rate
+    "Labor - Body":        bdy_lbr_rate
+    "Labor - Mechanical":  mchncl_lbr_rate
+    "Labor - Frame":       frm_lbr_rate
+    "Labor - Refinish":    bdy_lbr_rate
+    "Labor - Structural":  frm_lbr_rate
+    "Labor - Diagnostic":  mchncl_lbr_rate
 
   vehicle_makes:
     domestic:
