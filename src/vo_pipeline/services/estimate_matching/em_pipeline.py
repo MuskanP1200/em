@@ -7,28 +7,22 @@ in a single pass over all estimates, producing one unified line-level audit outp
 
 import json
 import os
-import sys
+import re
 import time
 import logging
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-# from dotenv import load_dotenv
 from openai import AzureOpenAI
 
 os.environ["PYDEVD_WARN_EVALUATION_TIMEOUT"] = "30"
 os.environ["PYDEVD_UNBLOCK_THREADS_TIMEOUT"] = "30"
 
-# ── Project paths ────────────────────────────────────────────────────────────
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
-from sql_connection import read_table  # noqa: E402
-from estimate_matching.llm_prompt import SYSTEM_PROMPT  # noqa: E402
-from estimate_matching.db_writer import save_results  # noqa: E402
-from estimate_matching.config import (  # noqa: E402
+from sql_connection import read_table
+from estimate_matching.llm_prompt import SYSTEM_PROMPT
+from estimate_matching.db_writer import save_results
+from estimate_matching.config import (
     DOMESTIC_MAKES,
     FOREIGN_MAKES,
     BAD_PART_NUMBERS,
@@ -62,7 +56,7 @@ from estimate_matching.config import (  # noqa: E402
     LLM_ENDPOINT,
     LLM_MAX_TOKENS,
 )
-from settings import get_settings  # noqa: E402
+from settings import get_settings
 
 # ── Configuration ────────────────────────────────────────────────────────────
 LOG_EVERY_N = 500
@@ -127,6 +121,26 @@ def get_unit_cost_by_labor_type(df: pd.DataFrame) -> pd.Series:
         mask = df["cieca_lbr_typ_dsc"] == labor_type
         result[mask] = df.loc[mask, rate_col]
     return result
+
+
+_GLASS_RATE_RE = re.compile(
+    r'(?:'
+    r'glass\s+lab(?:or|our)[^$\n]{0,40}\$\s*(\d+(?:\.\d+)?)'   # rate after:  "Glass Labor $39/hour"
+    r'|'
+    r'\$\s*(\d+(?:\.\d+)?)[^$\n]{0,40}glass\s+lab(?:or|our)'   # rate before: "at $39 for Glass Labor"
+    r')',
+    re.IGNORECASE,
+)
+
+
+def extract_glass_labor_rate(text: str) -> float | None:
+    """Extract a glass labor rate from free-text special instructions."""
+    if not text:
+        return None
+    m = _GLASS_RATE_RE.search(text)
+    if not m:
+        return None
+    return float(m.group(1) or m.group(2))
 
 
 # ── Parts: filtering ─────────────────────────────────────────────────────────
@@ -397,6 +411,14 @@ def match_labor_subtotals(
     if est_df.empty:
         return []
 
+    # Extract glass labor rate from special instructions before grouping
+    # (specl_instruct_txt is the same for all lines of an estimate)
+    glass_rate = extract_glass_labor_rate(
+        est_df["specl_instruct_txt"].dropna().iloc[0]
+        if "specl_instruct_txt" in est_df.columns and not est_df["specl_instruct_txt"].dropna().empty
+        else None
+    )
+
     # Group line-level data
     grouped = (
         est_df.groupby(EST_GROUPBY_COLS)
@@ -422,6 +444,14 @@ def match_labor_subtotals(
 
     # Unit cost match
     grouped["unit_cost_based_lbr_dsc"] = get_unit_cost_by_labor_type(grouped)
+
+    # Inject extracted glass rate for Labor - Glass rows where no fixed rate exists
+    if glass_rate is not None:
+        glass_mask = (
+            grouped["cieca_lbr_typ_dsc"].str.contains("glass", case=False, na=False)
+            & grouped["unit_cost_based_lbr_dsc"].isna()
+        )
+        grouped.loc[glass_mask, "unit_cost_based_lbr_dsc"] = glass_rate
     grouped["calc_unit_cost"] = (grouped["tot_amt"] / grouped["tot_hr"]).replace(
         [np.inf, -np.inf], np.nan
     )
@@ -819,9 +849,6 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # api/
     from api_logging.config_logging import configure_logging
-    from settings import get_settings
-
     configure_logging(get_settings())
     main()
