@@ -3,16 +3,19 @@ estimate_client.py
 ==================
 SOAP client for VR Services estimate APIs.
 
-Provides five public functions:
+Provides seven public functions:
     search_estimates(token, ...)                → list[dict]
     get_estimate_detail(token, est_id)          → pd.DataFrame
     get_electronic_estimate_xml(token, est_id)  → str
     get_cdr_group_vendor(token, vendor_id, grp) → dict  (lru-cached)
     get_repair_incident_detail(token, id)       → Optional[str]
+    get_image_list(token, est_id)               → list[dict]
+    get_image_bytes(token, attachment)          → tuple[str, bytes]
 """
 
 from __future__ import annotations
 
+import base64
 import logging
 from functools import lru_cache
 from typing import Optional
@@ -20,6 +23,7 @@ from typing import Optional
 import defusedxml.ElementTree as ET  # nosec B405
 import pandas as pd
 import requests
+import xmltodict
 
 from settings import get_settings
 from api_ingest.api_request_builder import (
@@ -28,6 +32,8 @@ from api_ingest.api_request_builder import (
     build_electronic_estimate_body,
     build_cdr_body,
     build_repair_incident_body,
+    build_image_list_body,
+    build_image_bytes_body,
 )
 from api_ingest.rate_limiter import API_RATE_LIMITER
 
@@ -102,6 +108,8 @@ def _check_status(root: ET.Element, label: str) -> None:
 
 
 def _get_text(el: ET.Element, tag: str, ns: str) -> Optional[str]:
+    if el is None:
+        return None
     child = el.find(f"{{{ns}}}{tag}")
     if child is None:
         return None
@@ -142,6 +150,8 @@ def search_estimates(
 
         items = root.findall(f".//{{{_NS_EST}}}EstimateSearchResultItem")
         if not items:
+            if start_row == 1:
+                log.warning("SearchEstimates: no results for status=%s group=%s", status_code, group)
             break
 
         for item in items:
@@ -198,29 +208,29 @@ def get_estimate_detail(token: str, est_id: str) -> pd.DataFrame:
     est_info = root.find(f"{{{_NS_EST}}}EstimateInfo")
     if est_info is None:
         log.warning("est_id=%s: missing EstimateInfo", est_id)
-        return pd.DataFrame([{"est_id": est_id}])
 
     vr_vendor_id = None
-    vendor_el = est_info.find(f"{{{_NS_EST}}}Vendor")
-    if vendor_el is not None:
-        for path in [
-            f".//{{{_NS_VEN}}}VrVendorId",
-            f".//{{{_NS_EST}}}VrVendorId",
-        ]:
-            el = vendor_el.find(path)
-            if el is not None and el.text:
-                vr_vendor_id = el.text.strip()
-                break
+    if est_info is not None:
+        vendor_el = est_info.find(f"{{{_NS_EST}}}Vendor")
+        if vendor_el is not None:
+            for path in [
+                f".//{{{_NS_VEN}}}VrVendorId",
+                f".//{{{_NS_EST}}}VrVendorId",
+            ]:
+                el = vendor_el.find(path)
+                if el is not None and el.text:
+                    vr_vendor_id = el.text.strip()
+                    break
 
     return pd.DataFrame(
         [
             {
-                "est_id":           _get_text(est_info, "EstimateId",          _NS_EST),
+                "est_id":           _get_text(est_info, "EstimateId",           _NS_EST) or est_id,
                 "vr_vendor_id":     vr_vendor_id,
-                "grp_nbr":          _get_text(est_info, "VendorGroup",         _NS_EST),
-                "repr_incident_id": _get_text(est_info, "ReprIncidentId",      _NS_EST),
-                "og_rcvd_dte":      _get_text(est_info, "ReceivedOriginalDate", _NS_EST),
-                "manual_estimate":  _get_bool(est_info, "ManualEstimate",      _NS_EST),
+                "grp_nbr":          _get_text(est_info, "VendorGroup",          _NS_EST),
+                "repr_incident_id": _get_text(est_info, "ReprIncidentId",       _NS_EST),
+                "og_rcvd_dte":      _get_text(est_info, "ReceivedOriginalDate",  _NS_EST),
+                "manual_estimate":  _get_bool(est_info, "ManualEstimate",       _NS_EST),
             }
         ]
     )
@@ -250,7 +260,6 @@ def get_cdr_group_vendor(token: str, vendor_id: str, group_number: str) -> dict:
     cdr = root.find(f".//{{{_NS_CDR}}}CDRGroupVendor")
     if cdr is None:
         log.warning("vendor=%s group=%s: missing CDRGroupVendor element", vendor_id, group_number)
-        cdr = ET.Element("empty")  # all lookups return None naturally
 
     result = {
         # ── Identity ──────────────────────────────────────────────────────────
@@ -320,6 +329,7 @@ def get_repair_incident_detail(token: str, repair_incident_id: str) -> Optional[
             API_TIMEOUT,
         )
     except APIClientError:
+        log.warning("repair_incident_id=%s: fetch failed, dmg_dsc will be None", repair_incident_id)
         return None
 
     el = root.find(f".//{{{_NS_REP}}}RepairIncidentSearchResultItem")
@@ -327,6 +337,40 @@ def get_repair_incident_detail(token: str, repair_incident_id: str) -> Optional[
         return None
 
     return _get_text(el, "DamageDescription", _NS_REP)
+
+
+# ── 6. Image list ─────────────────────────────────────────────────────────────
+def get_image_list(token: str, est_id: str) -> list[dict]:
+    raw = _execute_request(
+        f"GetAttachmentsForEstimate({est_id})",
+        build_image_list_body(token, est_id),
+        API_TIMEOUT,
+        parse_xml=False,
+    )
+    response = xmltodict.parse(raw)
+    attachments = response.get("att:GetAttachmentsForEstimateRS", {}).get("att:Attachment", [])
+    if isinstance(attachments, dict):
+        attachments = [attachments]
+    return attachments
+
+
+# ── 7. Image bytes ────────────────────────────────────────────────────────────
+def get_image_bytes(token: str, attachment: dict) -> tuple[str, bytes]:
+    attachment_id   = attachment.get("att:Id")
+    attachment_name = attachment.get("att:Name", f"{attachment_id}.jpg")
+
+    raw = _execute_request(
+        f"GetAttachmentBytes({attachment_id})",
+        build_image_bytes_body(token, attachment_id),
+        API_TIMEOUT,
+        parse_xml=False,
+    )
+    response = xmltodict.parse(raw)
+    image_b64 = response.get("att:GetAttachmentBytesRS", {}).get("att:AttachmentBytes")
+    if not image_b64:
+        raise APIClientError(f"GetAttachmentBytes({attachment_id}): no image bytes in response")
+
+    return attachment_name, base64.b64decode(image_b64)
 
 
 if __name__ == "__main__":
