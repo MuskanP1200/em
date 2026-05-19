@@ -31,31 +31,21 @@ Per-estimate API calls (parallel across estimates)
 from __future__ import annotations
 
 import logging
-import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
 
 import pandas as pd
 
-_SERVICES = Path(__file__).resolve().parent.parent
-_API = _SERVICES.parent
-sys.path.insert(0, str(_API))  # api/  — for settings
-sys.path.insert(
-    0, str(_SERVICES)
-)  # api/services/ — for api_auth, sql_connection, estimate_matching.*
-
-from api_ingest.estimate_client import (  # noqa: E402
+from api_ingest.estimate_client import (
     search_estimates,
     get_estimate_detail,
     get_electronic_estimate_xml,
     get_cdr_group_vendor,
     get_repair_incident_detail,
-    _empty_cdr_rates,
 )
-from api_ingest.electronic_estimate_parser import (  # noqa: E402
+from api_ingest.electronic_estimate_parser import (
     parse_estimate_xml_from_string,
 )
-from sql_connection import read_query, write_table  # noqa: E402
+from sql_connection import read_query, write_table
 
 log = logging.getLogger(__name__)
 
@@ -87,7 +77,7 @@ def search_and_save_new_estimates(
 
     Returns
     -------
-    list of est_id strings that were just inserted (empty if nothing new)
+    pd.DataFrame with est_id and repr_incident_id columns (empty if nothing new)
     """
     search_rows = search_estimates(
         token,
@@ -98,7 +88,7 @@ def search_and_save_new_estimates(
 
     if not search_rows:
         log.warning("SearchEstimates returned no results — nothing to ingest")
-        return []
+        return pd.DataFrame()
 
     df = pd.DataFrame(search_rows)
 
@@ -121,7 +111,7 @@ def search_and_save_new_estimates(
 
     if new_df.empty:
         log.info("No new estimates (all %d already in %s.%s)", len(df), schema, table)
-        return []
+        return pd.DataFrame()
 
     write_table(new_df, table, schema=schema, if_exists="append")
     log.info(
@@ -141,36 +131,42 @@ def search_and_save_new_estimates(
 
 def _fetch_one_estimate(
     token: str, est_id: str, repair_incident_id: str
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Fetch electronic estimate XML + detail for a single est_id.
-    Returns (est_lines, subtots, detail_dict).
-    Runs both API calls sequentially (they depend on different endpoints and
-    can be easily parallelised at the outer loop level).
-    """
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fetch all data for a single est_id: XML, detail, CDR rates, repair incident."""
     xml_str = get_electronic_estimate_xml(token, est_id)
     est_lines, subtots = parse_estimate_xml_from_string(xml_str)
     detail = get_estimate_detail(token, est_id)
 
-    damage_desc = None
-    if repair_incident_id:
-        damage_desc = get_repair_incident_detail(token, repair_incident_id)
-        est_lines["dmg_dsc"] = damage_desc
+    est_lines["dmg_dsc"] = get_repair_incident_detail(token, repair_incident_id)
 
-    return est_lines, subtots, detail
+    vr_vendor_id = detail.iloc[0].get("vr_vendor_id")
+    grp_nbr = detail.iloc[0].get("grp_nbr")
 
+    if vr_vendor_id and grp_nbr:
+        try:
+            cdr = get_cdr_group_vendor(token, vr_vendor_id, grp_nbr)
+        except Exception:
+            log.warning("est_id %s: CDR fetch failed — rates will be null", est_id, exc_info=True)
+            cdr = {}
+    else:
+        log.warning(
+            "est_id %s: missing vr_vendor_id=%s or grp_nbr=%s — CDR rates will be null",
+            est_id, vr_vendor_id, grp_nbr,
+        )
+        cdr = {}
 
-# ── CDR rate injection ────────────────────────────────────────────────────────
-
-
-def _inject_cdr_rates(est_lines: pd.DataFrame, cdr: dict) -> pd.DataFrame:
-    """
-    Overwrite CDR rate columns in est_lines with values from GetCDRGroupVendor.
-    Adds any column that doesn't yet exist.
-    """
     for col, val in cdr.items():
         est_lines[col] = val
-    return est_lines
+
+    if grp_nbr is not None:
+        est_lines["grp_nbr"] = grp_nbr
+
+    log.debug(
+        "est_id %s: %d lines, %d subtotals, CDR bdy_rate=%s",
+        est_id, len(est_lines), len(subtots), cdr.get("bdy_lbr_rate"),
+    )
+
+    return est_lines, subtots
 
 
 # ── Main loader ───────────────────────────────────────────────────────────────
@@ -217,48 +213,13 @@ def fetch_estimate_details(
         for fut in as_completed(futures):
             eid = futures[fut]
             try:
-                est_lines, subtots, detail = fut.result()
-            except Exception as exc:
-                log.error("est_id %s: fetch failed — %s", eid, exc)
+                est_lines, subtots = fut.result()
+            except Exception:
+                log.error("est_id %s: fetch failed", eid, exc_info=True)
                 continue
-
-            # ── Inject CDR rates ──────────────────────────────────────────────
-            vr_vendor_id = detail.iloc[0].get("vr_vendor_id")
-            grp_nbr = detail.iloc[0].get("grp_nbr")
-
-            if vr_vendor_id and grp_nbr:
-                try:
-                    cdr = get_cdr_group_vendor(token, vr_vendor_id, grp_nbr)
-                except Exception as exc:
-                    log.warning(
-                        "est_id %s: CDR group vendor fetch failed (%s) — using nulls",
-                        eid,
-                        exc,
-                    )
-                    cdr = _empty_cdr_rates()
-            else:
-                log.warning(
-                    "est_id %s: missing vr_vendor_id=%s or grp_nbr=%s — CDR rates will be null",
-                    eid,
-                    vr_vendor_id,
-                    grp_nbr,
-                )
-                cdr = _empty_cdr_rates()
-
-            est_lines = _inject_cdr_rates(est_lines, cdr)
-
-            if grp_nbr is not None:
-                est_lines["grp_nbr"] = grp_nbr
 
             all_lines.append(est_lines)
             all_subtot.append(subtots)
-            log.debug(
-                "est_id %s: %d lines, %d subtotals, CDR bdy_rate=%s",
-                eid,
-                len(est_lines),
-                len(subtots),
-                cdr.get("bdy_lbr_rate"),
-            )
 
     if not all_lines:
         log.error("No estimate data fetched successfully — returning empty DataFrames")
@@ -309,7 +270,7 @@ if __name__ == "__main__":
     )
 
     _est_ids = _est_ids_df["est_id"].dropna().to_list()
-    log.debug(f"New est_ids: {_est_ids}")
+    log.debug("New est_ids: %s", _est_ids)
 
     if _est_ids:
         est_line_df, subtot_df = fetch_estimate_details(
@@ -319,5 +280,5 @@ if __name__ == "__main__":
             table_names=(API_INGEST_EST_LINE, API_INGEST_EST_SUBTOT),
             schema=API_INGEST_SCHEMA,
         )
-        log.debug(f"est_line_df shape: {est_line_df.shape}")
-        log.debug(f"subtot_df   shape: {subtot_df.shape}")
+        log.debug("est_line_df shape: %s", est_line_df.shape)
+        log.debug("subtot_df   shape: %s", subtot_df.shape)
