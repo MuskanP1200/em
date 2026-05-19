@@ -1,8 +1,21 @@
 import logging
+from typing import Optional
+
 import requests
-import xmltodict
+import xml.etree.ElementTree as ET
+
+from settings import get_settings
 
 logger = logging.getLogger(__name__)
+
+settings = get_settings()
+
+AUTH_TIMEOUT = getattr(settings, "API_AUTH_TIMEOUT", 30)
+
+AUTH_HEADERS = {
+    "Content-Type": "application/xml",
+    "Accept": "application/xml",
+}
 
 AUTH_XML = """<AuthenticateUserRQ xmlns="http://erac.com/appsec/enhanced/rsi/webservice/auth">
     <Request xmlns="">
@@ -26,44 +39,51 @@ AUTH_XML = """<AuthenticateUserRQ xmlns="http://erac.com/appsec/enhanced/rsi/web
 </AuthenticateUserRQ>"""
 
 
+class AuthError(RuntimeError):
+    pass
+
+
+def _extract_token(xml_text: str) -> Optional[str]:
+    """Namespace-safe token extraction."""
+    try:
+        root = ET.fromstring(xml_text)
+    except Exception:
+        logger.error("Auth response XML parsing failed", exc_info=True)
+        return None
+
+    # Search ignoring namespace prefix
+    for el in root.iter():
+        if el.tag.endswith("Token"):
+            return (el.text or "").strip() or None
+
+    return None
+
+
 def get_token(username: str, password: str, auth_url: str) -> str:
     """
-    Authenticates with AppSec and returns a session token.
-
-    Args:
-        username: Service account username.
-        password: Service account password.
-        auth_url: Auth endpoint URL (passed from main config).
-
-    Returns:
-        Auth token string.
-
-    Raises:
-        RuntimeError: If authentication fails or token not found.
+    Authenticate and return session token.
     """
-    logger.info("Requesting AppSec token...")
 
-    response = requests.post(
-        auth_url,
-        headers={"Content-Type": "application/xml", "Accept": "application/xml"},
-        data=AUTH_XML.format(username=username, password=password),
-        timeout=30,
-    )
+    logger.info("Requesting AppSec token")
 
-    if response.status_code != 200:
-        raise RuntimeError(f"Auth failed [{response.status_code}]: {response.text}")
+    try:
+        resp = requests.post(
+            auth_url,
+            headers=AUTH_HEADERS,
+            data=AUTH_XML.format(username=username, password=password),
+            timeout=AUTH_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        logger.error("Auth request failed", exc_info=True)
+        raise AuthError("Authentication HTTP failure") from e
 
-    token = (
-        xmltodict.parse(response.text).get("auth:AuthenticateUserRS", {}).get("Token")
-    )
+    token = _extract_token(resp.text)
 
     if not token:
-        raise RuntimeError(f"Token not found in response: {response.text}")
+        logger.error("Token not found in auth response")
+        raise AuthError("Authentication succeeded but token missing")
+
+    logger.debug("Token retrieved successfully")
 
     return token
-
-
-# if __name__ == "__main__":
-#     token = get_token(username=, password=)
-
-#     print(f"token: {token}")
