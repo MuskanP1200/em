@@ -133,11 +133,14 @@ def _fetch_one_estimate(
     token: str, est_id: str, repair_incident_id: str
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Fetch all data for a single est_id: XML, detail, CDR rates, repair incident."""
-    xml_str = get_electronic_estimate_xml(token, est_id)
-    est_lines, subtots = parse_estimate_xml_from_string(xml_str)
-    detail = get_estimate_detail(token, est_id)
+    with ThreadPoolExecutor(max_workers=3) as inner:
+        xml_fut    = inner.submit(get_electronic_estimate_xml,  token, est_id)
+        detail_fut = inner.submit(get_estimate_detail,          token, est_id)
+        repair_fut = inner.submit(get_repair_incident_detail,   token, repair_incident_id)
 
-    est_lines["dmg_dsc"] = get_repair_incident_detail(token, repair_incident_id)
+    est_lines, subtots = parse_estimate_xml_from_string(xml_fut.result())
+    detail = detail_fut.result()
+    est_lines["dmg_dsc"] = repair_fut.result()
 
     vr_vendor_id = detail.iloc[0].get("vr_vendor_id")
     grp_nbr = detail.iloc[0].get("grp_nbr")
