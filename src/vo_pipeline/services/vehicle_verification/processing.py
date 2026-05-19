@@ -24,13 +24,12 @@ from vehicle_verification.matching import (
 )
 from vehicle_verification.ocr import ocr_image_bytes
 from vehicle_verification.vlm_classifier import classify_image_in_memory
+from vehicle_verification.matching import normalize_for_vin_match, normalize_for_odometer_match
 from vehicle_verification.utils import (
     is_image_name,
     is_pdf_name,
     is_thumbnail_name,
     leaf_name_of_prefix,
-    normalize_for_vin_match,
-    normalize_for_odometer_match,
     odo_to_str,
     UNSUPPORTED_FOR_VLM,
     DEFAULT_MIN_TEXT_LENGTH,
