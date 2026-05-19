@@ -17,16 +17,13 @@ Request bodies are built by api_request_builder.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 import defusedxml.ElementTree as ET  # nosec B405
 from functools import lru_cache
 from typing import Optional
 import pandas as pd
 import requests
-import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from settings import get_settings  # noqa: E402
+from settings import get_settings
 
 from api_ingest.api_request_builder import (
     build_search_body,
@@ -35,6 +32,7 @@ from api_ingest.api_request_builder import (
     build_cdr_body,
     build_repair_incident_body,
 )
+from api_ingest.rate_limiter import API_RATE_LIMITER
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 BASE_URL = get_settings().API_BASE_URL
@@ -60,6 +58,7 @@ log = logging.getLogger(__name__)
 
 def _post_xml(url: str, body: str, timeout: int = 30) -> ET.Element:
     """POST XML body, raise on HTTP error, return parsed ElementTree root."""
+    API_RATE_LIMITER.acquire()
     resp = requests.post(
         url,
         data=body.encode("utf-8"),
@@ -318,26 +317,13 @@ def get_cdr_group_vendor(token: str, vendor_id: str, group_number: str) -> dict:
         except ValueError:
             return None
 
-    def stxt(tag: str) -> Optional[str]:
-        el = cdr.find(f"{{{_NS_CDR}}}{tag}")
-        if (
-            el is None
-            or el.get("{http://www.w3.org/2001/XMLSchema-instance}nil") == "true"
-        ):
-            return None
-        return (el.text or "").strip() or None
-
-    def sbool(tag: str) -> Optional[bool]:
-        v = stxt(tag)
-        return None if v is None else v.lower() == "true"
-
     result = {
         # ── Identity ──────────────────────────────────────────────────────────
-        "grp_nbr": stxt("GroupNumber"),
-        "vndr_name": stxt("VendorName"),
-        "grp_note_txt": stxt("GroupNotes"),
-        "specl_instruct_txt": stxt("SpecialInstructions"),
-        "xcld_frm_cdr_ind": sbool("ExcludeFromCDRIndicator"),
+        "grp_nbr": _txt(cdr, "GroupNumber", _NS_CDR),
+        "vndr_name": _txt(cdr, "VendorName", _NS_CDR),
+        "grp_note_txt": _txt(cdr, "GroupNotes", _NS_CDR),
+        "specl_instruct_txt": _txt(cdr, "SpecialInstructions", _NS_CDR),
+        "xcld_frm_cdr_ind": _bool(cdr, "ExcludeFromCDRIndicator", _NS_CDR),
         # ── Labour rates ──────────────────────────────────────────────────────
         "bdy_lbr_rate": flt("BodyLaborRate"),
         "mchncl_lbr_rate": flt("MechanicalLaborRate"),
