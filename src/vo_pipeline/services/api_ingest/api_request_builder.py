@@ -1,42 +1,37 @@
 """
 api_request_builder.py
 ======================
-Pure XML body builders for all VR Services SOAP API requests.
-No I/O, no HTTP calls — just string construction.
+Pure XML body builders for VR Services SOAP APIs.
 
-Imported by api_client.py and image_fetcher.py.
+Uses a generic envelope builder to eliminate duplication.
+No I/O, no HTTP calls.
 """
 
 from xml.sax.saxutils import escape
+
 from settings import get_settings
 
-settings = get_settings()
+_settings = get_settings()
 
-# ── Config (moved out of hardcoded constants) ─────────────────────────────────
-_APP_STATIC_ID = "759935158"
-_CALLER_ID = "SVC_VEHREPR_DESKTOP"
-_CALLING_APP = "VEHREPR_DESKTOP"
-_CALLING_HOST = "tomcat8080:8080"
-_CALLER_GRP = "98"
+# ── Caller metadata ───────────────────────────────────────────────────────────
+
+_APP_STATIC_ID = getattr(_settings, "API_APP_STATIC_ID", "759935158")
+_CALLER_ID     = getattr(_settings, "API_CALLER_ID",      "SVC_VEHREPR_DESKTOP")
+_CALLING_APP   = getattr(_settings, "API_CALLING_APP",    "VEHREPR_DESKTOP")
+_CALLING_HOST  = getattr(_settings, "API_CALLING_HOST",   "tomcat8080:8080")
+_CALLER_GRP    = getattr(_settings, "API_CALLER_GROUP",   "98")
 
 # ── Namespaces ────────────────────────────────────────────────────────────────
 
 NS_EST = "http://erac.com/vrservices/webservice/estimateWeb"
+NS_CDR = "http://erac.com/vrservices/webservice/cdrWeb"
+NS_ATT = "http://erac.com/vrservices/webservice/attachmentWeb"
+NS_REP = "http://erac.com/vrservices/webservice/repairWeb"
 NS_WEB = "http://erac.com/vrservices/webservice"
 NS_SEC = "http://erac.com/services/security"
 NS_LOC = "http://erac.com/services/common/locale"
 NS_TYP = "http://erac.com/vrservices/webservice/typeCodeWeb"
-NS_ATT = "http://erac.com/vrservices/webservice/attachmentWeb"
-NS_REP = "http://erac.com/vrservices/webservice/repairWeb"
-
-
-def _ns_block(default_ns: str) -> str:
-    return f"""
-    xmlns="{default_ns}"
-    xmlns:web="{NS_WEB}"
-    xmlns:sec="{NS_SEC}"
-    xmlns:loc="{NS_LOC}"
-    """
+NS_XSI = "http://www.w3.org/2001/XMLSchema-instance"
 
 
 # ── Shared blocks ─────────────────────────────────────────────────────────────
@@ -71,85 +66,136 @@ def _locale_block() -> str:
 </Locale>"""
 
 
-# ── Builders ──────────────────────────────────────────────────────────────────
+# ── Generic envelope builder ──────────────────────────────────────────────────
 
 
-def build_search_body(token, status_code, group, start_row, rows_per_page):
-    return f"""<SearchEstimateRQ {_ns_block(NS_EST)} xmlns:typ="{NS_TYP}">
+def _build_envelope(
+    *,
+    root_tag: str,
+    default_ns: str,
+    token: str,
+    body: str,
+    extra_ns: dict[str, str] | None = None,
+) -> str:
+    ns_parts = [
+        f'xmlns="{default_ns}"',
+        f'xmlns:web="{NS_WEB}"',
+        f'xmlns:sec="{NS_SEC}"',
+        f'xmlns:loc="{NS_LOC}"',
+    ]
+    if extra_ns:
+        ns_parts.extend(f'xmlns:{k}="{v}"' for k, v in extra_ns.items())
+
+    ns_block = "\n    ".join(ns_parts)
+
+    return f"""<{root_tag}
+    {ns_block}>
 {_request_block()}
 {_security_block(token)}
 {_locale_block()}
-<SearchCriteria>
+{body}
+</{root_tag}>"""
+
+
+# ── Builders ──────────────────────────────────────────────────────────────────
+
+
+def build_search_body(
+    token: str,
+    status_code: str,
+    group: str,
+    start_row: int,
+    rows_per_page: int,
+) -> str:
+    body = f"""<SearchCriteria>
     <web:OrderBy>estimateReceivedDate</web:OrderBy>
     <web:OrderDirection>desc</web:OrderDirection>
+    <ClaimNumber xsi:nil="true"/>
     <web:PaginationDetail>
         <web:StartRowNumber>{start_row}</web:StartRowNumber>
         <web:RowsPerPage>{rows_per_page}</web:RowsPerPage>
     </web:PaginationDetail>
     <CountryCode>USA</CountryCode>
     <Group>{escape(group)}</Group>
+    <AdjusterUserId></AdjusterUserId>
+    <SupervisorId xsi:nil="true"/>
+    <ReceivedStartDate xsi:nil="true"/>
+    <ReceivedEndDate xsi:nil="true"/>
+    <CompletionStartDate xsi:nil="true"/>
+    <CompletionEndDate xsi:nil="true"/>
     <EstimateStatus>
         <typ:Code>{escape(status_code)}</typ:Code>
     </EstimateStatus>
-</SearchCriteria>
-</SearchEstimateRQ>"""
+    <MultiVendor>false</MultiVendor>
+    <IncludeWarnings>true</IncludeWarnings>
+    <SearchRepairByAdjuster>false</SearchRepairByAdjuster>
+</SearchCriteria>"""
+
+    return _build_envelope(
+        root_tag="SearchEstimateRQ",
+        default_ns=NS_EST,
+        token=token,
+        body=body,
+        extra_ns={"xsi": NS_XSI, "typ": NS_TYP},
+    )
 
 
-def build_estimate_detail_body(token, est_id):
-    return f"""<GetEstimateDetailForSubtotalsRQ {_ns_block(NS_EST)}>
-{_request_block()}
-{_security_block(token)}
-{_locale_block()}
-<EstimateId>{escape(est_id)}</EstimateId>
-</GetEstimateDetailForSubtotalsRQ>"""
+def build_estimate_detail_body(token: str, est_id: str) -> str:
+    return _build_envelope(
+        root_tag="GetEstimateDetailForSubtotalsRQ",
+        default_ns=NS_EST,
+        token=token,
+        body=f"<EstimateId>{escape(est_id)}</EstimateId>",
+    )
 
 
-def build_electronic_estimate_body(token, est_id):
-    return f"""<GetElectronicEstimateRQ {_ns_block(NS_EST)}>
-{_request_block()}
-{_security_block(token)}
-{_locale_block()}
-<EstimateId>{escape(est_id)}</EstimateId>
-</GetElectronicEstimateRQ>"""
+def build_electronic_estimate_body(token: str, est_id: str) -> str:
+    return _build_envelope(
+        root_tag="GetElectronicEstimateRQ",
+        default_ns=NS_EST,
+        token=token,
+        body=f"<EstimateId>{escape(est_id)}</EstimateId>",
+    )
 
 
-def build_cdr_body(token, vendor_id, group_number):
-    return f"""<GetCDRGroupVendorRQ {_ns_block(NS_CDR)}>
-{_request_block()}
-{_security_block(token)}
-{_locale_block()}
-<VendorId>{escape(vendor_id)}</VendorId>
-<GroupNumber>{escape(group_number)}</GroupNumber>
-</GetCDRGroupVendorRQ>"""
+def build_cdr_body(token: str, vendor_id: str, group_number: str) -> str:
+    return _build_envelope(
+        root_tag="GetCDRGroupVendorRQ",
+        default_ns=NS_CDR,
+        token=token,
+        body=f"""<VendorId>{escape(vendor_id)}</VendorId>
+<GroupNumber>{escape(group_number)}</GroupNumber>""",
+    )
 
 
-def build_image_list_body(token, est_id):
-    return f"""<GetAttachmentsForEstimateRQ {_ns_block(NS_ATT)}>
-{_request_block()}
-{_security_block(token)}
-{_locale_block()}
-<EstimateId>{escape(est_id)}</EstimateId>
+def build_image_list_body(token: str, est_id: str) -> str:
+    return _build_envelope(
+        root_tag="GetAttachmentsForEstimateRQ",
+        default_ns=NS_ATT,
+        token=token,
+        body=f"""<EstimateId>{escape(est_id)}</EstimateId>
 <NeedAttachmentBinaryDataIndicator>false</NeedAttachmentBinaryDataIndicator>
-</GetAttachmentsForEstimateRQ>"""
+<NewAttachmentIndicator>false</NewAttachmentIndicator>""",
+    )
 
 
-def build_image_bytes_body(token, attachment_id):
-    return f"""<GetAttachmentBytesRQ {_ns_block(NS_ATT)}>
-{_request_block()}
-{_security_block(token)}
-{_locale_block()}
-<AttachmentId>{escape(attachment_id)}</AttachmentId>
-<NeedAttachmentBinaryDataIndicator>true</NeedAttachmentBinaryDataIndicator>
-</GetAttachmentBytesRQ>"""
+def build_image_bytes_body(token: str, attachment_id: str) -> str:
+    return _build_envelope(
+        root_tag="GetAttachmentBytesRQ",
+        default_ns=NS_ATT,
+        token=token,
+        body=f"""<AttachmentId>{escape(attachment_id)}</AttachmentId>
+<NeedAttachmentBinaryDataIndicator>true</NeedAttachmentBinaryDataIndicator>""",
+    )
 
 
-def build_repair_incident_body(token, repair_incident_id):
-    return f"""<SearchRepairIncidentRQ {_ns_block(NS_REP)}>
-{_request_block()}
-{_security_block(token)}
-{_locale_block()}
-<SearchCriteria>
+def build_repair_incident_body(token: str, repair_incident_id: str) -> str:
+    return _build_envelope(
+        root_tag="SearchRepairIncidentRQ",
+        default_ns=NS_REP,
+        token=token,
+        body=f"""<SearchCriteria>
     <RepairIncidentId>{escape(repair_incident_id)}</RepairIncidentId>
     <IncludeDeleted>true</IncludeDeleted>
-</SearchCriteria>
-</SearchRepairIncidentRQ>"""
+</SearchCriteria>""",
+    )
