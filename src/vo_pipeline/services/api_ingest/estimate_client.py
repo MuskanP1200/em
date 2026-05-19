@@ -34,8 +34,10 @@ from api_ingest.api_request_builder import (
 )
 from api_ingest.rate_limiter import API_RATE_LIMITER
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
-BASE_URL = get_settings().API_BASE_URL
+# ── Endpoints / timeouts ─────────────────────────────────────────────────────
+BASE_URL         = get_settings().API_BASE_URL
+API_TIMEOUT      = getattr(get_settings(), "API_TIMEOUT",      30)
+API_TIMEOUT_LONG = getattr(get_settings(), "API_TIMEOUT_LONG", 60)
 
 # ── XML namespaces (for response parsing) ─────────────────────────────────────
 _NS_EST = "http://erac.com/vrservices/webservice/estimateWeb"
@@ -56,8 +58,8 @@ log = logging.getLogger(__name__)
 # ── Internal HTTP + parsing helpers ───────────────────────────────────────────
 
 
-def _post_xml(url: str, body: str, timeout: int = 30) -> ET.Element:
-    """POST XML body, raise on HTTP error, return parsed ElementTree root."""
+def _post_raw(url: str, body: str, timeout: int) -> str:
+    """POST XML body, acquire rate limit token, return raw response text."""
     API_RATE_LIMITER.acquire()
     resp = requests.post(
         url,
@@ -66,8 +68,12 @@ def _post_xml(url: str, body: str, timeout: int = 30) -> ET.Element:
         timeout=timeout,
     )
     resp.raise_for_status()
-    xml_string = resp.content
-    return ET.fromstring(xml_string)  # nosec B314
+    return resp.text
+
+
+def _post_xml(url: str, body: str, timeout: int = API_TIMEOUT) -> ET.Element:
+    """POST XML body and return parsed ElementTree root."""
+    return ET.fromstring(_post_raw(url, body, timeout))  # nosec B314
 
 
 def _check_status(root: ET.Element, label: str) -> None:
@@ -265,17 +271,9 @@ def get_estimate_detail(token: str, est_id: str) -> pd.DataFrame:
 def get_electronic_estimate_xml(token: str, est_id: str) -> str:
     """
     Call GetElectronicEstimateRQ and return the raw XML response string.
-    Pass the returned string to parse_estimate_xml_from_string() for parsing.
+    Returns large payloads unparsed — pass to parse_estimate_xml_from_string().
     """
-    body = build_electronic_estimate_body(token, est_id)
-    resp = requests.post(
-        BASE_URL,
-        data=body.encode("utf-8"),
-        headers=_COMMON_HEADERS,
-        timeout=60,
-    )
-    resp.raise_for_status()
-    return resp.text
+    return _post_raw(BASE_URL, build_electronic_estimate_body(token, est_id), API_TIMEOUT_LONG)
 
 
 # ── 4. Get CDR Group Vendor (cached per vendor + group) ───────────────────────
