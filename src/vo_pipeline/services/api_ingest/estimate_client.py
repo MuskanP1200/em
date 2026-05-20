@@ -24,6 +24,13 @@ import defusedxml.ElementTree as ET  # nosec B405
 import pandas as pd
 import requests
 import xmltodict
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+    before_sleep_log,
+)
 
 from settings import get_settings
 from api_ingest.api_request_builder import (
@@ -51,6 +58,7 @@ log = logging.getLogger(__name__)
 
 # ── Namespaces ────────────────────────────────────────────────────────────────
 _NS_EST = "http://erac.com/vrservices/webservice/estimateWeb"
+_NS_TYP = "http://erac.com/vrservices/webservice/typeCodeWeb"
 _NS_VEN = "http://erac.com/vrservices/webservice/vendorWeb"
 _NS_CDR = "http://erac.com/vrservices/webservice/cdrWeb"
 _NS_REP = "http://erac.com/vrservices/webservice/repairWeb"
@@ -63,6 +71,25 @@ class APIClientError(RuntimeError):
 
 
 # ── Core request executor ─────────────────────────────────────────────────────
+@retry(
+    retry=retry_if_exception_type((requests.Timeout, requests.ConnectionError)),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    before_sleep=before_sleep_log(log, logging.WARNING),
+    reraise=True,
+)
+def _post_with_retry(body: str, timeout: int) -> requests.Response:
+    API_RATE_LIMITER.acquire()
+    resp = requests.post(
+        BASE_URL,
+        data=body.encode("utf-8"),
+        headers=_COMMON_HEADERS,
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    return resp
+
+
 def _execute_request(
     label: str,
     body: str,
@@ -71,14 +98,7 @@ def _execute_request(
     parse_xml: bool = True,
 ) -> str | ET.Element:
     try:
-        API_RATE_LIMITER.acquire()
-        resp = requests.post(
-            BASE_URL,
-            data=body.encode("utf-8"),
-            headers=_COMMON_HEADERS,
-            timeout=timeout,
-        )
-        resp.raise_for_status()
+        resp = _post_with_retry(body, timeout)
 
         if not parse_xml:
             return resp.text
@@ -173,9 +193,9 @@ def search_estimates(
                     "veh_year":                     None,
                     "folder_prefix":                None,
                     "est_total_amt":                _get_text(item, "EstimateTotal",                _NS_EST),
-                    "est_stat_typ_id":              status_el.findtext(f"{{{_NS_EST}}}Id")          if status_el is not None else None,
-                    "est_stat_typ_cde":             status_el.findtext(f"{{{_NS_EST}}}Code")        if status_el is not None else None,
-                    "est_stat_typ_dsc":             status_el.findtext(f"{{{_NS_EST}}}Description") if status_el is not None else None,
+                    "est_stat_typ_id":              status_el.findtext(f"{{{_NS_TYP}}}Id")          if status_el is not None else None,
+                    "est_stat_typ_cde":             status_el.findtext(f"{{{_NS_TYP}}}Code")        if status_el is not None else None,
+                    "est_stat_typ_dsc":             status_el.findtext(f"{{{_NS_TYP}}}Description") if status_el is not None else None,
                     "primary_adjuster_user_id":     _get_text(item, "PrimaryAdjusterUserId",        _NS_EST),
                     "primary_adjuster_first_name":  _get_text(item, "PrimaryAdjusterFirstName",     _NS_EST),
                     "primary_adjuster_last_name":   _get_text(item, "PrimaryAdjusterLastName",      _NS_EST),
