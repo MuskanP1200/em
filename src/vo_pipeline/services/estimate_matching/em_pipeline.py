@@ -272,17 +272,26 @@ def _compute_parts_derived_cols(line: dict, parts_df: pd.DataFrame) -> None:
 
 
 # ── Parts: LLM audit ────────────────────────────────────────────────────────
+@retry(
+    retry=retry_if_exception_type(json.JSONDecodeError),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
 def audit_estimate_with_llm(client: AzureOpenAI, estimate_json: dict) -> list[dict]:
     """Send one estimate to the LLM, return parsed audit results."""
     response = client.chat.completions.create(
         model=LLM_DEPLOYMENT,
         max_tokens=LLM_MAX_TOKENS,
+        response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps(estimate_json, indent=2)},
         ],
     )
     return json.loads(response.choices[0].message.content)
+
 
 
 # ── Parts: subtotal matching ─────────────────────────────────────────────────
