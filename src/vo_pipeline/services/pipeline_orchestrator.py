@@ -3,9 +3,11 @@
 # Step 2 — VI: vehicle image verification per est_id
 # Step 3 — EM: estimate matching (parts + labour validation) per est_id
 
+import threading
 import time
 import yaml
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
@@ -30,11 +32,6 @@ from vehicle_verification.vi_pipeline import run_vi_pipeline
 from api_ingest.api_ingestion_pipeline import (
     run_api_ingestion_pipeline,
 )
-
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from api_logging.config_logging import configure_logging, current_est_id
 from settings import get_settings
@@ -63,9 +60,13 @@ def cast_numeric(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     return df
 
 
+EM_VI_WORKERS = 3  # number of estimates processed concurrently in Steps 2+3
+
+
 def run_pipeline():
     pipeline_start = time.perf_counter()
     vi_ok, vi_fail, em_ok, em_fail = 0, 0, 0, 0
+    _lock = threading.Lock()
 
     # ── Reset tables (dev/test only) ──────────────────────────────────────────
     if RESET_STAGING:
@@ -111,35 +112,47 @@ def run_pipeline():
 
     client = create_llm_client() if RUN_EM else None
 
-    for est_id in est_ids[:1000]:
+    def _process_one(est_id: str) -> None:
+        nonlocal vi_ok, vi_fail, em_ok, em_fail
         token = current_est_id.set(str(est_id))
         try:
             est_rows = est_line_df[est_line_df["est_id"] == int(est_id)]
             subtot_rows = subtot_df[subtot_df["est_id"] == int(est_id)]
 
-            # ── Step 2: Vehicle verification ──────────────────────────────────────
+            # ── Step 2: Vehicle verification ──────────────────────────────────
             if RUN_VI:
                 t = time.perf_counter()
                 try:
                     run_vi_pipeline(est_id)
                     logger.info("VI  ✓  %.1fs", time.perf_counter() - t)
-                    vi_ok += 1
+                    with _lock:
+                        vi_ok += 1
                 except Exception as e:
                     logger.error("VI  ✗  %s", e, exc_info=True)
-                    vi_fail += 1
+                    with _lock:
+                        vi_fail += 1
 
-            # ── Step 3: Estimate matching ─────────────────────────────────────────
+            # ── Step 3: Estimate matching ──────────────────────────────────────
             if RUN_EM:
                 t = time.perf_counter()
                 try:
                     run_em_pipeline(est_id, est_rows, subtot_rows, client)
                     logger.info("EM  ✓  %.1fs", time.perf_counter() - t)
-                    em_ok += 1
+                    with _lock:
+                        em_ok += 1
                 except Exception as e:
                     logger.error("EM  ✗  %s", e, exc_info=True)
-                    em_fail += 1
+                    with _lock:
+                        em_fail += 1
         finally:
             current_est_id.reset(token)
+
+    with ThreadPoolExecutor(max_workers=EM_VI_WORKERS) as pool:
+        futures = {pool.submit(_process_one, est_id): est_id for est_id in est_ids[:1000]}
+        for fut in as_completed(futures):
+            exc = fut.exception()
+            if exc:
+                logger.error("est_id %s: unhandled error — %s", futures[fut], exc, exc_info=True)
 
     # ── Step 4: Enrich EM summary with VI results ─────────────────────────────
     if RUN_VI and RUN_EM:
