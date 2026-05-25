@@ -45,6 +45,7 @@ api_ingest:
   group:       DR            # CDR group code
   max_records: 40            # null = fetch all; integer = cap for smoke-testing
   max_workers: 5             # parallel threads for per-estimate API calls
+  image_workers: 10          # parallel threads for image fetch+upload within one estimate
 
 
 # =============================================================================
@@ -212,6 +213,13 @@ estimate_matching:
       - undercharged
     other_chrg_audit:
       - other_charges_match
+    paint_audit:
+      - paint_tot_amt
+      - refinish_hrs
+      - expected_paint_rate
+      - actual_paint_rate
+      - paint_rate_match
+      - paint_rate_direction
     parts_subtot_audit:
       - line_tot_part_amt
       - line_adj_amt
@@ -233,13 +241,16 @@ estimate_matching:
       - dtl_lbr_tot_amt
       # - lbr_rate
       - bdy_lbr_rate
+      - mchncl_lbr_rate
       - frm_lbr_rate
+      - pnt_mtrl_rate          # paint-and-material rate — used by match_paint_subtotals
       - dtl_part_nbr_qty
       - dtl_act_part_price_amt
       - dtl_tot_part_price_amt
       - cieca_line_adj_amt
       # - cieca_line_net_amt
       - cieca_dtl_hdr_id
+      - paint_hrs          # refinish hours — used by match_labour_refinish
     subtot:
       - est_id
       - gross_amt
