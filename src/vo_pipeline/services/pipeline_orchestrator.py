@@ -60,7 +60,7 @@ def cast_numeric(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     return df
 
 
-EM_VI_WORKERS = 3  # number of estimates processed concurrently in Steps 2+3
+EM_VI_WORKERS = 2  # number of estimates processed concurrently in Steps 2+3
 
 
 def run_pipeline():
@@ -115,6 +115,7 @@ def run_pipeline():
     def _process_one(est_id: str) -> None:
         nonlocal vi_ok, vi_fail, em_ok, em_fail
         token = current_est_id.set(str(est_id))
+        logger.debug("est_id %s: worker started — active threads: %d", est_id, threading.active_count())
         try:
             est_rows = est_line_df[est_line_df["est_id"] == int(est_id)]
             subtot_rows = subtot_df[subtot_df["est_id"] == int(est_id)]
@@ -145,6 +146,7 @@ def run_pipeline():
                     with _lock:
                         em_fail += 1
         finally:
+            logger.debug("est_id %s: worker done — active threads: %d", est_id, threading.active_count())
             current_est_id.reset(token)
 
     with ThreadPoolExecutor(max_workers=EM_VI_WORKERS) as pool:
