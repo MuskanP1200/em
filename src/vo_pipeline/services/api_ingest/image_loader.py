@@ -1,4 +1,5 @@
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from storage import upload_blob_bytes
@@ -54,6 +55,10 @@ def upload_estimate_images(
             )
             return None
 
+    logger.debug(
+        "est_id=%s: starting image upload pool (workers=%d, attachments=%d) — active threads: %d",
+        est_id, max_workers, len(attachments), threading.active_count(),
+    )
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = [pool.submit(_process_attachment, att) for att in attachments]
         for fut in as_completed(futures):
@@ -66,6 +71,10 @@ def upload_estimate_images(
         est_id,
         len(uploaded_urls),
         len(attachments),
+    )
+    logger.debug(
+        "est_id=%s: image upload pool done — active threads: %d",
+        est_id, threading.active_count(),
     )
 
     return uploaded_urls
