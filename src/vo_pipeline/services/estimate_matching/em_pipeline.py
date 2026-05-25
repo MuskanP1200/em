@@ -6,10 +6,12 @@ in a single pass over all estimates, producing one unified line-level audit outp
 """
 
 import json
+import logging
 import os
 import re
 import time
-import logging
+
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential, before_sleep_log
 
 import numpy as np
 import pandas as pd
@@ -35,6 +37,7 @@ from estimate_matching.config import (
     LBR_AUDIT_COLS,
     OTHER_CHRG_AUDIT_COLS,
     PARTS_SUBTOT_AUDIT_COLS,
+    PAINT_AUDIT_COLS,
     ROUND_DECIMALS,
     LABOR_TYPE_RATE_MAP,
     EST_LINE_NUMERIC_COLS,
@@ -284,14 +287,12 @@ def audit_estimate_with_llm(client: AzureOpenAI, estimate_json: dict) -> list[di
     response = client.chat.completions.create(
         model=LLM_DEPLOYMENT,
         max_tokens=LLM_MAX_TOKENS,
-        response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps(estimate_json, indent=2)},
         ],
     )
     return json.loads(response.choices[0].message.content)
-
 
 
 # ── Parts: subtotal matching ─────────────────────────────────────────────────
@@ -401,102 +402,6 @@ def match_parts_subtotals(
     return merged.to_dict(orient="records")
 
 
-# ── Labour: Body / Mechanical / Frame / Glass matching ───────────────────────
-def match_labor_subtotals(
-    est_df: pd.DataFrame, est_subtot_df: pd.DataFrame
-) -> list[dict]:
-    """
-    Validate labour lines for one estimate against the subtotal table.
-    Returns list of dicts (one per labour type).
-    """
-    est_df = est_df[
-        est_df["cieca_lbr_typ_dsc"].str.contains("labor", case=False, na=False)
-    ].copy()
-    lbr_subtot_df = est_subtot_df[
-        est_subtot_df["cieca_tot_typ_dsc"].str.contains("labor", case=False, na=False)
-    ].copy()
-    lbr_subtot_df = lbr_subtot_df.rename(columns=SUBTOT_RENAME_MAP)
-
-    if est_df.empty:
-        return []
-
-    # Extract glass labor rate from special instructions before grouping
-    # (specl_instruct_txt is the same for all lines of an estimate)
-    glass_rate = extract_glass_labor_rate(
-        est_df["specl_instruct_txt"].dropna().iloc[0]
-        if "specl_instruct_txt" in est_df.columns and not est_df["specl_instruct_txt"].dropna().empty
-        else None
-    )
-
-    # Group line-level data
-    grouped = (
-        est_df.groupby(EST_GROUPBY_COLS)
-        .agg(**EST_AGG_MAP)
-        .reset_index()
-        .round(ROUND_DECIMALS)
-    )
-
-    # Merge subtotal rates
-    grouped = grouped.merge(lbr_subtot_df, on=SUBTOT_MERGE_COLS, how="left")
-    grouped["tot_hr"] = grouped["tot_hr"].fillna(0)
-
-    # Hours match
-    no_hr_data = (grouped["tot_hr"].isna() | (grouped["tot_hr"] == 0)) & (
-        grouped["dtl_lbr_hr_qty"].isna() | (grouped["dtl_lbr_hr_qty"] == 0)
-    )
-    hrs_match = grouped["dtl_lbr_hr_qty"].round(ROUND_DECIMALS) == grouped[
-        "tot_hr"
-    ].round(ROUND_DECIMALS)
-    grouped["lbr_typ_hrs_match"] = np.where(
-        no_hr_data, "Match", np.where(hrs_match, "Match", "No Match")
-    )
-
-    # Unit cost match
-    grouped["unit_cost_based_lbr_dsc"] = get_unit_cost_by_labor_type(grouped)
-
-    # Inject extracted glass rate for Labor - Glass rows where no fixed rate exists
-    if glass_rate is not None:
-        glass_mask = (
-            grouped["cieca_lbr_typ_dsc"].str.contains("glass", case=False, na=False)
-            & grouped["unit_cost_based_lbr_dsc"].isna()
-        )
-        grouped.loc[glass_mask, "unit_cost_based_lbr_dsc"] = glass_rate
-    grouped["calc_unit_cost"] = (grouped["tot_amt"] / grouped["tot_hr"]).replace(
-        [np.inf, -np.inf], np.nan
-    )
-
-    both_null = (
-        grouped["unit_cost_based_lbr_dsc"].isna() & grouped["calc_unit_cost"].isna()
-    )
-    cost_match = grouped["unit_cost_based_lbr_dsc"].round(ROUND_DECIMALS) == grouped[
-        "calc_unit_cost"
-    ].round(ROUND_DECIMALS)
-    grouped["lbr_typ_unit_cost_match"] = np.where(
-        no_hr_data,
-        "Match",
-        np.where(both_null, "Match", np.where(cost_match, "Match", "No Match")),
-    )
-
-    # Overall match
-    grouped["overall_lbr_match"] = np.where(
-        (grouped["lbr_typ_hrs_match"] == "Match")
-        & (grouped["lbr_typ_unit_cost_match"] == "Match"),
-        "Match",
-        "No Match",
-    )
-
-    # Directional flags — only meaningful when unit cost mismatches
-    mismatch = grouped["lbr_typ_unit_cost_match"] == "No Match"
-    grouped["overcharged"] = np.where(
-        mismatch, grouped["calc_unit_cost"] > grouped["unit_cost_based_lbr_dsc"], None
-    )
-    grouped["undercharged"] = np.where(
-        mismatch, grouped["calc_unit_cost"] < grouped["unit_cost_based_lbr_dsc"], None
-    )
-
-    return grouped.to_dict(orient="records")
-
-
 # ── Labour: Refinish matching ────────────────────────────────────────────────
 def match_labour_refinish(
     est_df: pd.DataFrame, est_subtot_df: pd.DataFrame
@@ -596,6 +501,215 @@ def match_labour_refinish(
     }]
 
 
+# ── Paint / Materials matching ───────────────────────────────────────────────
+def match_paint_subtotals(
+    est_df: pd.DataFrame, est_subtot_df: pd.DataFrame
+) -> list[dict]:
+    """
+    Validate the Materials-Paint subtotal for one estimate.
+
+    Paint material cost = Labour-Refinish hours × pnt_mtrl_rate (CDR contracted rate).
+
+    actual_paint_rate   = Materials-Paint tot_amt  / Labour-Refinish tot_hr
+    expected_paint_rate = pnt_mtrl_rate from the CDR profile
+
+    Checks
+    ------
+    paint_rate_match     : actual_paint_rate == expected_paint_rate  (within ±$0.10)
+    paint_rate_direction : "Over" if shop charged more, "Under" if less, None if match
+    """
+    REFINISH_SUBTOT_LABEL = "Labor - Refinish"
+
+    # ── Paint subtotal — aggregate all rows that mention both "paint" and
+    #    "material" (covers "Materials - Paint", "Materials - 2 Stage Paint
+    #    Materials", "Materials - 3 Stage Paint Materials", etc.)  ────────────
+    dsc_col = est_subtot_df["cieca_tot_typ_dsc"].str.strip().str.lower()
+    paint_mask = dsc_col.str.contains("paint", na=False) & dsc_col.str.contains("material", na=False)
+    paint_subtot = est_subtot_df[paint_mask].copy()
+
+    if paint_subtot.empty:
+        return []  # No paint subtotal — nothing to validate
+
+    paint_subtot = cast_numeric(paint_subtot, ["tot_amt"])
+    paint_tot_amt = float(paint_subtot["tot_amt"].sum() or 0)
+
+    # Record the distinct labels that were aggregated (useful for debugging)
+    aggregated_labels = ", ".join(paint_subtot["cieca_tot_typ_dsc"].str.strip().unique().tolist())
+
+    # ── Refinish hours — from subtotal (preferred) then line fallback ─────────
+    ref_subtot = est_subtot_df[
+        est_subtot_df["cieca_tot_typ_dsc"].str.strip() == REFINISH_SUBTOT_LABEL
+    ].copy()
+
+    if not ref_subtot.empty:
+        ref_subtot = cast_numeric(ref_subtot, ["tot_hr"])
+        refinish_hrs = float(ref_subtot.iloc[0].get("tot_hr") or 0)
+    else:
+        ref_lines = (
+            est_df[est_df["paint_type_code"].str.strip().str.upper() == "R"]
+            if "paint_type_code" in est_df.columns
+            else pd.DataFrame()
+        )
+        refinish_hrs = (
+            float(pd.to_numeric(ref_lines["paint_hrs"], errors="coerce").sum())
+            if not ref_lines.empty
+            else 0.0
+        )
+
+    refinish_hrs = round(refinish_hrs, ROUND_DECIMALS)
+
+    est_id = int(est_df["est_id"].iloc[0])
+
+    # ── Expected paint rate from CDR profile ──────────────────────────────────
+    pnt_rates = (
+        est_df["pnt_mtrl_rate"].dropna()
+        if "pnt_mtrl_rate" in est_df.columns
+        else pd.Series([], dtype=float)
+    )
+    expected_paint_rate = (
+        round(float(pd.to_numeric(pnt_rates.iloc[0], errors="coerce")), ROUND_DECIMALS)
+        if not pnt_rates.empty
+        else None
+    )
+
+    # ── Actual paint rate = total cost / refinish hours ───────────────────────
+    actual_paint_rate = (
+        round(paint_tot_amt / refinish_hrs, ROUND_DECIMALS)
+        if refinish_hrs != 0
+        else None
+    )
+
+    # ── Rate match (tolerance ±$0.10 for floating-point prices) ──────────────
+    if expected_paint_rate is not None and actual_paint_rate is not None:
+        paint_rate_match = (
+            "Match"
+            if abs(actual_paint_rate - expected_paint_rate) <= 0.10
+            else "No Match"
+        )
+    else:
+        paint_rate_match = "Match"  # cannot evaluate — treat as pass
+
+    # ── Direction ─────────────────────────────────────────────────────────────
+    if (
+        paint_rate_match == "No Match"
+        and expected_paint_rate is not None
+        and actual_paint_rate is not None
+    ):
+        paint_rate_direction = "Over" if actual_paint_rate > expected_paint_rate else "Under"
+    else:
+        paint_rate_direction = None
+
+    log.debug(
+        "est_id %s: paint tot=%.2f (aggregated from: %s) | refinish_hrs=%.1f | rate expected=%s actual=%s | match=%s",
+        est_id, paint_tot_amt, aggregated_labels, refinish_hrs,
+        expected_paint_rate, actual_paint_rate, paint_rate_match,
+    )
+
+    return [{
+        "est_id":               est_id,
+        "cieca_tot_typ_dsc":    aggregated_labels,  # e.g. "Materials - Paint, Materials - 2 Stage Paint Materials"
+        "paint_tot_amt":        paint_tot_amt,
+        "refinish_hrs":         refinish_hrs,
+        "expected_paint_rate":  expected_paint_rate,
+        "actual_paint_rate":    actual_paint_rate,
+        "paint_rate_match":     paint_rate_match,
+        "paint_rate_direction": paint_rate_direction,
+    }]
+
+
+# ── Labour: Body / Mechanical / Frame / Glass matching ───────────────────────
+def match_labor_subtotals(
+    est_df: pd.DataFrame, est_subtot_df: pd.DataFrame
+) -> list[dict]:
+    """
+    Validate labour lines for one estimate against the subtotal table.
+    Returns list of dicts (one per labour type).
+    """
+    est_df = est_df[
+        est_df["cieca_lbr_typ_dsc"].str.contains("labor", case=False, na=False)
+    ].copy()
+    lbr_subtot_df = est_subtot_df[
+        est_subtot_df["cieca_tot_typ_dsc"].str.contains("labor", case=False, na=False)
+    ].copy()
+    lbr_subtot_df = lbr_subtot_df.rename(columns=SUBTOT_RENAME_MAP)
+
+    if est_df.empty:
+        return []
+
+    # Extract glass labor rate from special instructions before grouping
+    # (specl_instruct_txt is the same for all lines of an estimate)
+    glass_rate = extract_glass_labor_rate(
+        est_df["specl_instruct_txt"].dropna().iloc[0]
+        if "specl_instruct_txt" in est_df.columns and not est_df["specl_instruct_txt"].dropna().empty
+        else None
+    )
+
+    # Group line-level data
+    grouped = (
+        est_df.groupby(EST_GROUPBY_COLS)
+        .agg(**EST_AGG_MAP)
+        .reset_index()
+        .round(ROUND_DECIMALS)
+    )
+
+    # Merge subtotal rates
+    grouped = grouped.merge(lbr_subtot_df, on=SUBTOT_MERGE_COLS, how="left")
+    grouped["tot_hr"] = grouped["tot_hr"].fillna(0)
+
+    # Hours match
+    no_hr_data = (grouped["tot_hr"].isna() | (grouped["tot_hr"] == 0)) & (
+        grouped["dtl_lbr_hr_qty"].isna() | (grouped["dtl_lbr_hr_qty"] == 0)
+    )
+    hrs_match = grouped["dtl_lbr_hr_qty"].round(ROUND_DECIMALS) == grouped[
+        "tot_hr"
+    ].round(ROUND_DECIMALS)
+    grouped["lbr_typ_hrs_match"] = np.where(
+        no_hr_data, "Match", np.where(hrs_match, "Match", "No Match")
+    )
+
+    # Unit cost match
+    grouped["expected_lbr_rate"] = get_unit_cost_by_labor_type(grouped)
+
+    # Inject extracted glass rate for Labor - Glass rows where no fixed rate exists
+    if glass_rate is not None:
+        glass_mask = (
+            grouped["cieca_lbr_typ_dsc"].str.contains("glass", case=False, na=False)
+            & grouped["expected_lbr_rate"].isna()
+        )
+        grouped.loc[glass_mask, "expected_lbr_rate"] = glass_rate
+    grouped["actual_lbr_rate"] = (grouped["tot_amt"] / grouped["tot_hr"]).replace(
+        [np.inf, -np.inf], np.nan
+    )
+
+    cost_match = grouped["expected_lbr_rate"].round(ROUND_DECIMALS) == grouped[
+        "actual_lbr_rate"
+    ].round(ROUND_DECIMALS)
+    grouped["lbr_typ_unit_cost_match"] = np.where(
+        no_hr_data,
+        "Match",
+        np.where(cost_match, "Match", "No Match"),
+    )
+
+    # Overall match
+    grouped["overall_lbr_match"] = np.where(
+        (grouped["lbr_typ_hrs_match"] == "Match")
+        & (grouped["lbr_typ_unit_cost_match"] == "Match"),
+        "Match",
+        "No Match",
+    )
+
+    # Directional flags — only meaningful when unit cost mismatches
+    mismatch = grouped["lbr_typ_unit_cost_match"] == "No Match"
+    grouped["overcharged"] = np.where(
+        mismatch, grouped["actual_lbr_rate"] > grouped["expected_lbr_rate"], None
+    )
+    grouped["undercharged"] = np.where(
+        mismatch, grouped["actual_lbr_rate"] < grouped["expected_lbr_rate"], None
+    )
+
+    return grouped.to_dict(orient="records")
+
+
 # ── Data loading (branches on data_source_mode from config.yaml) ─────────────
 
 
@@ -687,6 +801,7 @@ def run_em_pipeline(
     parts_results = []
     parts_subtot_results = []
     lbr_results = []
+    paint_results = []
 
     # ── Parts matching (LLM) ────────────────────────────────────────────────
     parts_lines = filter_parts_lines(est_rows)
@@ -713,7 +828,6 @@ def run_em_pipeline(
     except Exception as e:
         logger.error("est_id %s: PARTS SUBTOTAL ERROR — %s", est_id, e)
 
-
     # ── Labour matching — Body / Mechanical / Frame / Glass (rule-based) ───────
     try:
         result = match_labor_subtotals(est_rows, subtot_rows)
@@ -730,13 +844,22 @@ def run_em_pipeline(
     except Exception as e:
         logger.error("est_id %s: REFINISH LABOUR ERROR — %s", est_id, e)
 
+    # ── Paint / Materials-Paint matching (rule-based) ────────────────────────
+    try:
+        result = match_paint_subtotals(est_rows, subtot_rows)
+        if result:
+            paint_results.extend(result)
+    except Exception as e:
+        logger.error("est_id %s: PAINT SUBTOTAL ERROR — %s", est_id, e)
+
     # ── Assemble + persist ───────────────────────────────────────────────────
     df_parts_audit = pd.DataFrame(parts_results)
     df_parts_subtot_audit = pd.DataFrame(parts_subtot_results)
     df_lbr_audit = pd.DataFrame(lbr_results)
+    df_paint_audit = pd.DataFrame(paint_results)
 
     est_summary, subtot_detail, line_detail = _build_output_tables(
-        est_rows, df_parts_audit, df_parts_subtot_audit, df_lbr_audit
+        est_rows, df_parts_audit, df_parts_subtot_audit, df_lbr_audit, df_paint_audit
     )
     if save:
         save_results(est_summary, subtot_detail, line_detail, if_exists="append")
@@ -752,6 +875,7 @@ def _build_output_tables(
     df_parts_audit: pd.DataFrame,
     df_parts_subtot_audit: pd.DataFrame,
     df_lbr_audit: pd.DataFrame,
+    df_paint_audit: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Assemble the three output DataFrames from raw audit results.
@@ -814,14 +938,26 @@ def _build_output_tables(
     df_lbr_sub.rename(columns={"cieca_lbr_typ_dsc": "cieca_tot_typ_dsc"}, inplace=True)
     df_lbr_sub["subtot_type"] = "labor"
 
+    _df_paint = df_paint_audit if df_paint_audit is not None else pd.DataFrame()
+    paint_subtot_cols = ["est_id", "cieca_tot_typ_dsc"] + PAINT_AUDIT_COLS
+    df_paint_sub = (
+        _df_paint[[c for c in paint_subtot_cols if c in _df_paint.columns]].copy()
+        if not _df_paint.empty
+        else pd.DataFrame()
+    )
+    if not df_paint_sub.empty:
+        df_paint_sub["subtot_type"] = "paint"
+
     subtot_cols = (
         ["est_id", "cieca_tot_typ_dsc", "subtot_type"]
         + PARTS_SUBTOT_AUDIT_COLS
         + LBR_AUDIT_COLS
+        + PAINT_AUDIT_COLS
         + RATE_COLS
     )
     subtot_detail = pd.concat(
-        [df_parts_sub, df_lbr_sub], ignore_index=True, sort=False
+        [df for df in [df_parts_sub, df_lbr_sub, df_paint_sub] if not df.empty and not df.isna().all(axis=None)],
+        ignore_index=True, sort=False
     ).reindex(columns=subtot_cols)
 
     # ── Table 3: est_summary ─────────────────────────────────────────────────
@@ -949,9 +1085,9 @@ def main():
             logger.error("est_id %s: FAILED — %s", est_id, e)
 
     save_results(
-        pd.concat(all_summary, ignore_index=True),
-        pd.concat(all_subtot, ignore_index=True),
-        pd.concat(all_line, ignore_index=True),
+        pd.concat([df for df in all_summary if not df.empty and not df.isna().all(axis=None)], ignore_index=True),
+        pd.concat([df for df in all_subtot  if not df.empty and not df.isna().all(axis=None)], ignore_index=True),
+        pd.concat([df for df in all_line    if not df.empty and not df.isna().all(axis=None)], ignore_index=True),
         if_exists="replace",
     )
 
