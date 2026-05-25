@@ -23,7 +23,7 @@ class FixedWindowRateLimiter:
         self._window_start = time.monotonic()
         self._lock = threading.Lock()
 
-    def acquire(self) -> None:
+    def acquire(self, label: str = "") -> None:
         """Block until a call is permitted within the current window."""
         while True:
             with self._lock:
@@ -43,8 +43,8 @@ class FixedWindowRateLimiter:
                 if self._count < self._rate:
                     self._count += 1
                     log.debug(
-                        "API call permitted: %d/%d in current window",
-                        self._count, self._rate,
+                        "API call permitted: %d/%d in current window [%s]",
+                        self._count, self._rate, label,
                     )
                     return
 
@@ -52,8 +52,8 @@ class FixedWindowRateLimiter:
                 wait = self._window - elapsed
                 log.warning(
                     "Rate limit reached: %d/%d calls in current window — "
-                    "throttling, waiting %.3fs for next window",
-                    self._count, self._rate, wait,
+                    "throttling, waiting %.3fs for next window [%s]",
+                    self._count, self._rate, wait, label,
                 )
 
             time.sleep(wait)
