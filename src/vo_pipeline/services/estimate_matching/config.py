@@ -4,10 +4,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from settings import get_settings  # noqa: E402
+from settings import get_settings
 
 _full_cfg: dict[str, Any] = yaml.safe_load(
     (Path(__file__).parent.parent / "config.yaml").read_text()
@@ -37,6 +35,7 @@ _api = _full_cfg["api_ingest"]
 AUTH_URL: str = _settings.API_AUTH_URL
 API_MAX_RECORDS: int | None = _api.get("max_records")
 API_MAX_WORKERS: int = _api.get("max_workers", 4)
+API_IMAGE_WORKERS: int = _api.get("image_workers", 10)
 API_CONFIG: dict = _api
 
 # ── EM output table names ─────────────────────────────────────────────────────
@@ -67,6 +66,7 @@ RATE_COLS: list[str] = _cfg["output_columns"]["rates"]
 PARTS_AUDIT_COLS: list[str] = _cfg["output_columns"]["parts_audit"]
 LBR_AUDIT_COLS: list[str] = _cfg["output_columns"]["labor_audit"]
 OTHER_CHRG_AUDIT_COLS: list[str] = _cfg["output_columns"]["other_chrg_audit"]
+PAINT_AUDIT_COLS: list[str] = _cfg["output_columns"]["paint_audit"]
 PARTS_SUBTOT_AUDIT_COLS: list[str] = _cfg["output_columns"]["parts_subtot_audit"]
 
 # ── Numerics / groupby / agg ──────────────────────────────────────────────────
