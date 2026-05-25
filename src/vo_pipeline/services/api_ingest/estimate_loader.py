@@ -31,6 +31,7 @@ Per-estimate API calls (parallel across estimates)
 from __future__ import annotations
 
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
@@ -133,6 +134,7 @@ def _fetch_one_estimate(
     token: str, est_id: str, repair_incident_id: str
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Fetch all data for a single est_id: XML, detail, CDR rates, repair incident."""
+    log.debug("est_id %s: inner fetch started — active threads: %d", est_id, threading.active_count())
     with ThreadPoolExecutor(max_workers=3) as inner:
         xml_fut    = inner.submit(get_electronic_estimate_xml,  token, est_id)
         detail_fut = inner.submit(get_estimate_detail,          token, est_id)
@@ -228,8 +230,8 @@ def fetch_estimate_details(
         log.error("No estimate data fetched successfully — returning empty DataFrames")
         return pd.DataFrame(), pd.DataFrame()
 
-    est_line_df = pd.concat([df for df in all_lines if not df.empty], ignore_index=True)
-    subtot_df = pd.concat([df for df in all_subtot if not df.empty], ignore_index=True)
+    est_line_df = pd.concat([df for df in all_lines  if not df.empty and not df.isna().all(axis=None)], ignore_index=True)
+    subtot_df   = pd.concat([df for df in all_subtot if not df.empty and not df.isna().all(axis=None)], ignore_index=True)
 
     log.info(
         "API load complete: %d line rows, %d subtotal rows, %d unique est_ids",
