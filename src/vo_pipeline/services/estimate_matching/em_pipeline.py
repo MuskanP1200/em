@@ -401,7 +401,7 @@ def match_parts_subtotals(
     return merged.to_dict(orient="records")
 
 
-# ── Labour: matching ─────────────────────────────────────────────────────────
+# ── Labour: Body / Mechanical / Frame / Glass matching ───────────────────────
 def match_labor_subtotals(
     est_df: pd.DataFrame, est_subtot_df: pd.DataFrame
 ) -> list[dict]:
@@ -495,6 +495,105 @@ def match_labor_subtotals(
     )
 
     return grouped.to_dict(orient="records")
+
+
+# ── Labour: Refinish matching ────────────────────────────────────────────────
+def match_labour_refinish(
+    est_df: pd.DataFrame, est_subtot_df: pd.DataFrame
+) -> list[dict]:
+    """
+    Validate Labour-Refinish hours and rate for one estimate.
+
+    In API-sourced data, refinish labour is NOT carried as a ``cieca_lbr_typ_dsc``
+    row.  Instead each paint/refinish operation line carries:
+        paint_hrs       — refinish hours for that line
+        paint_type_code — 'R' identifies refinish (vs 'B' blend, 'M' material)
+
+    The subtotal table holds one "Labor - Refinish" row whose ``tot_hr`` is the
+    sum of all ``paint_hrs`` where ``paint_type_code == 'R'``.
+
+    Checks
+    ------
+    lbr_typ_hrs_match      : sum(paint_hrs where code='R') == subtotal.tot_hr
+    lbr_typ_unit_cost_match : bdy_lbr_rate (contracted) == tot_amt / tot_hr
+    """
+    REFINISH_LABEL = "Labor - Refinish"
+
+    # Lines contributing to refinish hours
+    ref_lines = est_df[
+        est_df["paint_type_code"].str.strip().str.upper() == "R"
+    ].copy() if "paint_type_code" in est_df.columns else pd.DataFrame()
+
+    # Refinish subtotal row
+    ref_subtot = est_subtot_df[
+        est_subtot_df["cieca_tot_typ_dsc"].str.strip() == REFINISH_LABEL
+    ].copy()
+
+    if ref_subtot.empty:
+        # No refinish subtotal — nothing to validate
+        return []
+
+    ref_subtot = cast_numeric(ref_subtot, ["tot_hr", "tot_amt"])
+    subtot_row = ref_subtot.iloc[0]
+
+    est_id = int(est_df["est_id"].iloc[0])
+    tot_hr = float(subtot_row.get("tot_hr") or 0)
+    tot_amt = float(subtot_row.get("tot_amt") or 0)
+
+    # Sum refinish hours from line data
+    line_paint_hrs = round(
+        float(pd.to_numeric(ref_lines["paint_hrs"], errors="coerce").sum())
+        if not ref_lines.empty else 0.0,
+        ROUND_DECIMALS,
+    )
+
+    # Hours match
+    no_hr_data = (tot_hr == 0) and (line_paint_hrs == 0)
+    hrs_match = round(line_paint_hrs, ROUND_DECIMALS) == round(tot_hr, ROUND_DECIMALS)
+    lbr_typ_hrs_match = "Match" if (no_hr_data or hrs_match) else "No Match"
+
+    # Rate match — contracted refinish rate is bdy_lbr_rate (same as Body)
+    bdy_rates = est_df["bdy_lbr_rate"].dropna() if "bdy_lbr_rate" in est_df.columns else pd.Series([], dtype=float)
+    expected_rate = round(float(pd.to_numeric(bdy_rates.iloc[0], errors="coerce")), ROUND_DECIMALS) if not bdy_rates.empty else None
+
+    actual_rate = round(tot_amt / tot_hr, ROUND_DECIMALS) if tot_hr != 0 else None
+
+    if expected_rate is not None and actual_rate is not None and not no_hr_data:
+        cost_match = round(float(expected_rate), ROUND_DECIMALS) == actual_rate
+        lbr_typ_unit_cost_match = "Match" if cost_match else "No Match"
+    else:
+        lbr_typ_unit_cost_match = "Match"  # cannot evaluate — treat as pass
+
+    overall = (
+        "Match"
+        if lbr_typ_hrs_match == "Match" and lbr_typ_unit_cost_match == "Match"
+        else "No Match"
+    )
+
+    mismatch = lbr_typ_unit_cost_match == "No Match"
+    overcharged  = (actual_rate > expected_rate) if (mismatch and expected_rate is not None and actual_rate is not None) else None
+    undercharged = (actual_rate < expected_rate) if (mismatch and expected_rate is not None and actual_rate is not None) else None
+
+    log.debug(
+        "est_id %s: refinish hrs line=%.1f subtot=%.1f | rate expected=%s actual=%s | hrs=%s rate=%s",
+        est_id, line_paint_hrs, tot_hr,
+        expected_rate, actual_rate,
+        lbr_typ_hrs_match, lbr_typ_unit_cost_match,
+    )
+
+    return [{
+        "est_id":                  est_id,
+        "cieca_lbr_typ_dsc":       REFINISH_LABEL,
+        "dtl_lbr_hr_qty":          line_paint_hrs,  # paint_hrs used as proxy for refinish hrs
+        "tot_hr":                  tot_hr,
+        "lbr_typ_hrs_match":       lbr_typ_hrs_match,
+        "expected_lbr_rate":       expected_rate,
+        "actual_lbr_rate":         actual_rate,
+        "lbr_typ_unit_cost_match": lbr_typ_unit_cost_match,
+        "overall_lbr_match":       overall,
+        "overcharged":             overcharged,
+        "undercharged":            undercharged,
+    }]
 
 
 # ── Data loading (branches on data_source_mode from config.yaml) ─────────────
@@ -614,13 +713,22 @@ def run_em_pipeline(
     except Exception as e:
         logger.error("est_id %s: PARTS SUBTOTAL ERROR — %s", est_id, e)
 
-    # ── Labour matching (rule-based) ────────────────────────────────────────
+
+    # ── Labour matching — Body / Mechanical / Frame / Glass (rule-based) ───────
     try:
         result = match_labor_subtotals(est_rows, subtot_rows)
         if result:
             lbr_results.extend(result)
     except Exception as e:
         logger.error("est_id %s: LABOUR ERROR — %s", est_id, e)
+
+    # ── Labour-Refinish matching — paint_hrs where paint_type_code='R' ──────────
+    try:
+        result = match_labour_refinish(est_rows, subtot_rows)
+        if result:
+            lbr_results.extend(result)
+    except Exception as e:
+        logger.error("est_id %s: REFINISH LABOUR ERROR — %s", est_id, e)
 
     # ── Assemble + persist ───────────────────────────────────────────────────
     df_parts_audit = pd.DataFrame(parts_results)
