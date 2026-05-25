@@ -78,8 +78,8 @@ class APIClientError(RuntimeError):
     before_sleep=before_sleep_log(log, logging.WARNING),
     reraise=True,
 )
-def _post_with_retry(body: str, timeout: int) -> requests.Response:
-    API_RATE_LIMITER.acquire()
+def _post_with_retry(body: str, timeout: int, label: str = "") -> requests.Response:
+    API_RATE_LIMITER.acquire(label=label)
     resp = requests.post(
         BASE_URL,
         data=body.encode("utf-8"),
@@ -98,7 +98,7 @@ def _execute_request(
     parse_xml: bool = True,
 ) -> str | ET.Element:
     try:
-        resp = _post_with_retry(body, timeout)
+        resp = _post_with_retry(body, timeout, label=label)
 
         if not parse_xml:
             return resp.text
@@ -106,6 +106,9 @@ def _execute_request(
         root = ET.fromstring(resp.text)  # nosec B314
         _check_status(root, label)
         return root
+
+    except APIClientError:
+        raise  # known API error — caller is responsible for logging
 
     except requests.RequestException as e:
         log.error("%s: HTTP error", label, exc_info=True)
@@ -234,13 +237,19 @@ def get_estimate_detail(token: str, est_id: str) -> pd.DataFrame:
         vendor_el = est_info.find(f"{{{_NS_EST}}}Vendor")
         if vendor_el is not None:
             for path in [
-                f".//{{{_NS_VEN}}}VrVendorId",
-                f".//{{{_NS_EST}}}VrVendorId",
+                f".//{{{_NS_VEN}}}VendorGID",    # actual field in XML
+                f".//{{{_NS_VEN}}}VrVendorId",   # fallback — older API versions
+                f".//{{{_NS_EST}}}VrVendorId",   # fallback — older API versions
             ]:
                 el = vendor_el.find(path)
                 if el is not None and el.text:
                     vr_vendor_id = el.text.strip()
                     break
+
+        if vr_vendor_id is None:
+            approval_el = est_info.find(f"{{{_NS_EST}}}ApprovalFormData")
+            if approval_el is not None:
+                vr_vendor_id = _get_text(approval_el, "VendorId", _NS_EST)
 
     return pd.DataFrame(
         [
