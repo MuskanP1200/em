@@ -955,10 +955,15 @@ def _build_output_tables(
         + PAINT_AUDIT_COLS
         + RATE_COLS
     )
-    subtot_detail = pd.concat(
-        [df for df in [df_parts_sub, df_lbr_sub, df_paint_sub] if not df.empty and not df.isna().all(axis=None)],
-        ignore_index=True, sort=False
-    ).reindex(columns=subtot_cols)
+    _subtot_frames = [
+        df for df in [df_parts_sub, df_lbr_sub, df_paint_sub]
+        if not df.empty and not df.isna().all(axis=None)
+    ]
+    subtot_detail = (
+        pd.concat(_subtot_frames, ignore_index=True, sort=False).reindex(columns=subtot_cols)
+        if _subtot_frames
+        else pd.DataFrame(columns=subtot_cols)
+    )
 
     # ── Table 3: est_summary ─────────────────────────────────────────────────
     # One row per est_id. Estimate-level pass/fail + key metadata + issue counts.
