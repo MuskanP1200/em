@@ -128,9 +128,11 @@ def get_unit_cost_by_labor_type(df: pd.DataFrame) -> pd.Series:
 
 _GLASS_RATE_RE = re.compile(
     r'(?:'
-    r'glass\s+lab(?:or|our)[^$\n]{0,40}\$\s*(\d+(?:\.\d+)?)'   # rate after:  "Glass Labor $39/hour"
+    r'glass\s+lab(?:or|our)[^$\n]{0,40}\$\s*(\d+(?:\.\d+)?)'   # group 1 — "Glass Labor $39/hour"
     r'|'
-    r'\$\s*(\d+(?:\.\d+)?)[^$\n]{0,40}glass\s+lab(?:or|our)'   # rate before: "at $39 for Glass Labor"
+    r'\$\s*(\d+(?:\.\d+)?)[^$\n]{0,40}glass\s+lab(?:or|our)'   # group 2 — "$39 for Glass Labor"
+    r'|'
+    r'glass[^$\n]{0,10}\$\s*(\d+(?:\.\d+)?)'                   # group 3 — "Glass $39"
     r')',
     re.IGNORECASE,
 )
