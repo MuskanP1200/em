@@ -31,6 +31,7 @@ from typing import Any, Dict, List
 
 import numpy as np
 import psycopg2
+import psycopg2.errors
 import psycopg2.extras
 from psycopg2.extras import Json
 
@@ -116,7 +117,15 @@ class DBWriter:
 
     def _make_create_folders_sql(self) -> str:
         t = self._folders_table
+        # Extract unqualified table name for the matching composite type.
+        # PostgreSQL auto-creates a row type with the same name when CREATE TABLE
+        # runs.  If the table was previously dropped without CASCADE the type
+        # becomes orphaned and blocks recreation.  Dropping it here first makes
+        # ensure_tables() idempotent regardless of prior drop method.
+        type_name = t.split(".")[-1]
+        schema    = t.split(".")[0] if "." in t else "public"
         return f"""
+DROP TYPE IF EXISTS {schema}.{type_name};
 CREATE TABLE IF NOT EXISTS {t} (
     folder_name                         TEXT PRIMARY KEY,
     est_id                              TEXT,
@@ -174,7 +183,10 @@ CREATE TABLE IF NOT EXISTS {t} (
         ft = self._folders_table
         pk = self._pk_constraint_name
         fk = self._fk_constraint_name
+        type_name = t.split(".")[-1]
+        schema    = t.split(".")[0] if "." in t else "public"
         return f"""
+DROP TYPE IF EXISTS {schema}.{type_name};
 CREATE TABLE IF NOT EXISTS {t} (
     folder_name                             TEXT NOT NULL,
     image_path                              TEXT NOT NULL,
