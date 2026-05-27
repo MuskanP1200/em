@@ -117,15 +117,23 @@ class DBWriter:
 
     def _make_create_folders_sql(self) -> str:
         t = self._folders_table
-        # Extract unqualified table name for the matching composite type.
-        # PostgreSQL auto-creates a row type with the same name when CREATE TABLE
-        # runs.  If the table was previously dropped without CASCADE the type
-        # becomes orphaned and blocks recreation.  Dropping it here first makes
-        # ensure_tables() idempotent regardless of prior drop method.
         type_name = t.split(".")[-1]
         schema    = t.split(".")[0] if "." in t else "public"
+        # Only drop the orphaned composite type when the TABLE does not exist.
+        # PostgreSQL creates a row type alongside every table; if the table was
+        # previously dropped without CASCADE the type lingers and blocks the next
+        # CREATE TABLE.  Dropping it unconditionally would fail when the table is
+        # still present (DependentObjectsStillExist).
         return f"""
-DROP TYPE IF EXISTS {schema}.{type_name};
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = '{schema}' AND table_name = '{type_name}'
+    ) THEN
+        DROP TYPE IF EXISTS {schema}.{type_name};
+    END IF;
+END $$;
 CREATE TABLE IF NOT EXISTS {t} (
     folder_name                         TEXT PRIMARY KEY,
     est_id                              TEXT,
@@ -186,7 +194,15 @@ CREATE TABLE IF NOT EXISTS {t} (
         type_name = t.split(".")[-1]
         schema    = t.split(".")[0] if "." in t else "public"
         return f"""
-DROP TYPE IF EXISTS {schema}.{type_name};
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = '{schema}' AND table_name = '{type_name}'
+    ) THEN
+        DROP TYPE IF EXISTS {schema}.{type_name};
+    END IF;
+END $$;
 CREATE TABLE IF NOT EXISTS {t} (
     folder_name                             TEXT NOT NULL,
     image_path                              TEXT NOT NULL,
