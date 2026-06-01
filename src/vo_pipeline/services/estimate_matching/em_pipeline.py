@@ -145,7 +145,7 @@ def extract_glass_labor_rate(text: str) -> float | None:
     m = _GLASS_RATE_RE.search(text)
     if not m:
         return None
-    return float(m.group(1) or m.group(2))
+    return float(m.group(1) or m.group(2) or m.group(3))
 
 
 # ── Parts: filtering ─────────────────────────────────────────────────────────
@@ -207,7 +207,7 @@ def build_estimate_json(est_df: pd.DataFrame) -> dict:
         )
 
     return {
-        "est_id": int(first["est_id"]),
+        "est_id": first["est_id"],
         "veh_make": str(first.get("veh_make", "")),
         # "damage_description": first["dmg_dsc"],
         "discount_rates": {
@@ -337,11 +337,8 @@ def match_parts_subtotals(
             line_adj_amt=("cieca_line_adj_amt", "sum"),
         )
         .reset_index()
-        .round(ROUND_DECIMALS)
     )
-    grouped["line_net_amt"] = (
-        grouped["line_tot_part_amt"] + grouped["line_adj_amt"]
-    ).round(ROUND_DECIMALS)
+    grouped["line_net_amt"] = grouped["line_tot_part_amt"] + grouped["line_adj_amt"]
 
     # Merge subtotal
 
@@ -367,23 +364,23 @@ def match_parts_subtotals(
         ],
     ).fillna(0)
 
-    gross_match = merged["line_tot_part_amt"].round(ROUND_DECIMALS) == merged[
-        "gross_amt"
-    ].round(ROUND_DECIMALS)
+    AMOUNT_TOLERANCE = 1.0  # allow up to $1 difference to absorb rounding noise
+
+    gross_match = (merged["line_tot_part_amt"] - merged["gross_amt"]).abs() <= AMOUNT_TOLERANCE
     merged["parts_gross_match"] = np.where(
         no_subtot,
         "No subtotal found",
         np.where(gross_match, "Match", "No Match"),
     )
 
-    adj_match = merged["line_adj_amt"] == merged["adj_tot_amt"].round(ROUND_DECIMALS)
+    adj_match = (merged["line_adj_amt"] - merged["adj_tot_amt"]).abs() <= AMOUNT_TOLERANCE
     merged["adj_match"] = np.where(
         no_subtot,
         "No subtotal found",
         np.where(adj_match, "Match", "No Match"),
     )
 
-    net_match = merged["line_net_amt"] == merged["tot_amt"].round(ROUND_DECIMALS)
+    net_match = (merged["line_net_amt"] - merged["tot_amt"]).abs() <= AMOUNT_TOLERANCE
     merged["parts_net_match"] = np.where(
         no_subtot,
         "No subtotal found",
@@ -443,7 +440,7 @@ def match_labour_refinish(
     ref_subtot = cast_numeric(ref_subtot, ["tot_hr", "tot_amt"])
     subtot_row = ref_subtot.iloc[0]
 
-    est_id = int(est_df["est_id"].iloc[0])
+    est_id = est_df["est_id"].iloc[0]
     tot_hr = float(subtot_row.get("tot_hr") or 0)
     tot_amt = float(subtot_row.get("tot_amt") or 0)
 
@@ -481,7 +478,7 @@ def match_labour_refinish(
     overcharged  = (actual_rate > expected_rate) if (mismatch and expected_rate is not None and actual_rate is not None) else None
     undercharged = (actual_rate < expected_rate) if (mismatch and expected_rate is not None and actual_rate is not None) else None
 
-    log.debug(
+    logger.debug(
         "est_id %s: refinish hrs line=%.1f subtot=%.1f | rate expected=%s actual=%s | hrs=%s rate=%s",
         est_id, line_paint_hrs, tot_hr,
         expected_rate, actual_rate,
@@ -560,7 +557,7 @@ def match_paint_subtotals(
 
     refinish_hrs = round(refinish_hrs, ROUND_DECIMALS)
 
-    est_id = int(est_df["est_id"].iloc[0])
+    est_id = est_df["est_id"].iloc[0]
 
     # ── Expected paint rate from CDR profile ──────────────────────────────────
     pnt_rates = (
@@ -601,7 +598,7 @@ def match_paint_subtotals(
     else:
         paint_rate_direction = None
 
-    log.debug(
+    logger.debug(
         "est_id %s: paint tot=%.2f (aggregated from: %s) | refinish_hrs=%.1f | rate expected=%s actual=%s | match=%s",
         est_id, paint_tot_amt, aggregated_labels, refinish_hrs,
         expected_paint_rate, actual_paint_rate, paint_rate_match,
@@ -651,8 +648,14 @@ def match_labor_subtotals(
         est_df.groupby(EST_GROUPBY_COLS)
         .agg(**EST_AGG_MAP)
         .reset_index()
-        .round(ROUND_DECIMALS)
     )
+    # Rate columns (bdy_lbr_rate, mchncl_lbr_rate, frm_lbr_rate) are None — not NaN —
+    # when CDR data is missing, leaving them as object dtype.  DataFrame.round() calls
+    # float() on each element and blows up on None.  Coerce object columns to numeric first.
+    for col in grouped.columns:
+        if grouped[col].dtype == object and col not in EST_GROUPBY_COLS:
+            grouped[col] = pd.to_numeric(grouped[col], errors="coerce")
+    grouped = grouped.round(ROUND_DECIMALS)
 
     # Merge subtotal rates
     grouped = grouped.merge(lbr_subtot_df, on=SUBTOT_MERGE_COLS, how="left")
@@ -844,7 +847,7 @@ def run_em_pipeline(
         if result:
             lbr_results.extend(result)
     except Exception as e:
-        logger.error("est_id %s: REFINISH LABOUR ERROR — %s", est_id, e)
+        logger.error("est_id %s: REFINISH LABOUR ERROR — %s", est_id, e, exc_info=True)
 
     # ── Paint / Materials-Paint matching (rule-based) ────────────────────────
     try:
@@ -852,7 +855,7 @@ def run_em_pipeline(
         if result:
             paint_results.extend(result)
     except Exception as e:
-        logger.error("est_id %s: PAINT SUBTOTAL ERROR — %s", est_id, e)
+        logger.error("est_id %s: PAINT SUBTOTAL ERROR — %s", est_id, e, exc_info=True)
 
     # ── Assemble + persist ───────────────────────────────────────────────────
     df_parts_audit = pd.DataFrame(parts_results)
@@ -864,7 +867,7 @@ def run_em_pipeline(
         est_rows, df_parts_audit, df_parts_subtot_audit, df_lbr_audit, df_paint_audit
     )
     if save:
-        save_results(est_summary, subtot_detail, line_detail, if_exists="append")
+        save_results(est_summary, subtot_detail, line_detail)
 
     # elapsed = time.perf_counter() - t0
     # logger.info("est_id %s: EM completed in %.2fs", est_id, elapsed)
@@ -951,7 +954,7 @@ def _build_output_tables(
         df_paint_sub["subtot_type"] = "paint"
 
     subtot_cols = (
-        ["est_id", "cieca_tot_typ_dsc", "subtot_type"]
+        ["est_id", "claim_number", "cieca_tot_typ_dsc", "subtot_type"]
         + PARTS_SUBTOT_AUDIT_COLS
         + LBR_AUDIT_COLS
         + PAINT_AUDIT_COLS
@@ -962,15 +965,20 @@ def _build_output_tables(
         if not df.empty and not df.isna().all(axis=None)
     ]
     subtot_detail = (
-        pd.concat(_subtot_frames, ignore_index=True, sort=False).reindex(columns=subtot_cols)
+        pd.concat(_subtot_frames, ignore_index=True, sort=False)
         if _subtot_frames
         else pd.DataFrame(columns=subtot_cols)
     )
+    if not subtot_detail.empty and "claim_number" in est_line_df.columns:
+        claim_map = est_line_df[["est_id", "claim_number"]].drop_duplicates("est_id")
+        subtot_detail = subtot_detail.merge(claim_map, on="est_id", how="left")
+    subtot_detail = subtot_detail.reindex(columns=subtot_cols)
 
     # ── Table 3: est_summary ─────────────────────────────────────────────────
     # One row per est_id. Estimate-level pass/fail + key metadata + issue counts.
     est_meta_cols = [
         "est_id",
+        "claim_number",
         "est_tot_amt",
         "lbr_hr_qty",
         "grp_nbr",
@@ -1042,8 +1050,8 @@ def _build_output_tables(
     )
 
     for df in [lbr_pass, parts_pass, parts_issues, under_discount_issues, lbr_issues]:
-        est_summary["est_id"] = est_summary["est_id"].astype(int)
-        df["est_id"] = df["est_id"].astype(int)
+        est_summary["est_id"] = est_summary["est_id"].astype(str)
+        df["est_id"] = df["est_id"].astype(str)
         est_summary = est_summary.merge(df, on="est_id", how="left")
 
     lbr_ok = est_summary["lbr_est_pass"].isna() | est_summary["lbr_est_pass"].eq(True)
