@@ -32,7 +32,7 @@ def _fetch_est_record(
     plate_col = col_map.get("license_plate") or None
     odo_col = col_map.get("odometer") or None
 
-    select_parts = [f"{prefix_col} AS prefix"]
+    select_parts = [f"{prefix_col} AS prefix", "claim_number"]
     if vin_col:
         select_parts.append(f"{vin_col} AS vin")
     if plate_col:
@@ -104,6 +104,7 @@ def run_vi_pipeline(est_id: str) -> int:
         return 1
 
     prefix = (record.get("prefix") or "").strip()
+    claim_number = record.get("claim_number") or None
     vin = record.get("vin") or None
     license_plate = record.get("license_plate") or None
     odometer = record.get("odometer") or None
@@ -195,6 +196,7 @@ def run_vi_pipeline(est_id: str) -> int:
 
     # ── Write results to DB ───────────────────────────────────────────
     result["est_id"] = est_id
+    result["claim_number"] = claim_number
     success = db.upsert_folder(result)
     if not success:
         logger.error("DB write failed for est_id=%s / prefix=%s.", est_id, prefix)
