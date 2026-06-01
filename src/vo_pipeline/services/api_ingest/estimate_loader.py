@@ -46,7 +46,9 @@ from api_ingest.estimate_client import (
 from api_ingest.electronic_estimate_parser import (
     parse_estimate_xml_from_string,
 )
-from sql_connection import read_query, write_table
+from sqlalchemy import text
+
+from sql_connection import get_engine, read_query, write_table
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +68,10 @@ def search_and_save_new_estimates(
     Search for estimates via the VR Services API, insert only rows whose
     est_id is not already present in ``{schema}.{table}``, and return the
     list of newly inserted est_ids.
+
+    Deduplication is enforced at the DB level via PRIMARY KEY on est_id +
+    ON CONFLICT DO NOTHING, so concurrent runs or retries cannot produce
+    duplicates regardless of application-level race conditions.
 
     Parameters
     ----------
@@ -92,39 +98,55 @@ def search_and_save_new_estimates(
         return pd.DataFrame()
 
     df = pd.DataFrame(search_rows)
+    new_est_ids = _insert_new_estimates(df, schema, table)
 
-    # ── Find which est_ids are already stored ────────────────────────────────
-    try:
-        existing = read_query(f"SELECT est_id FROM {schema}.{table}")  # nosec B608
-        existing_ids = set(existing["est_id"].dropna().tolist())
-    except Exception as e:
-        # Table doesn't exist yet — all rows are new
-        log.warning(
-            "Failed to query existing est_ids from %s.%s (table may not exist): %s",
-            schema,
-            table,
-            e,
-            exc_info=True,
-        )
-        existing_ids = set()
-
-    new_df = df[~df["est_id"].isin(existing_ids)]
-
-    if new_df.empty:
+    if not new_est_ids:
         log.info("No new estimates (all %d already in %s.%s)", len(df), schema, table)
         return pd.DataFrame()
 
-    write_table(new_df, table, schema=schema, if_exists="append")
     log.info(
         "Inserted %d new rows into %s.%s (%d already existed)",
-        len(new_df),
+        len(new_est_ids),
         schema,
         table,
-        len(df) - len(new_df),
+        len(df) - len(new_est_ids),
     )
 
-    est_repr_df = new_df[["est_id", "repr_incident_id"]]
-    return est_repr_df
+    new_df = df[df["est_id"].isin(new_est_ids)]
+    return new_df[["est_id", "claim_number", "repr_incident_id"]]
+
+
+def _insert_new_estimates(df: pd.DataFrame, schema: str, table: str) -> list[str]:
+    """
+    Bulk-insert all rows into est_raw using ON CONFLICT (est_id) DO NOTHING.
+
+    The DB PRIMARY KEY on est_id is the authoritative dedup guard — no
+    application-level pre-check needed. Returns the est_ids that were
+    actually inserted so the caller knows which are genuinely new.
+    """
+    cols = list(df.columns)
+    col_list = ", ".join(cols)
+
+    # Replace NaN/NA with None so they map to SQL NULL
+    rows = df.where(df.notna(), other=None).to_dict(orient="records")
+
+    placeholders: list[str] = []
+    params: dict = {}
+    for i, row in enumerate(rows):
+        placeholders.append(f"({', '.join(f':{c}_{i}' for c in cols)})")
+        for col in cols:
+            params[f"{col}_{i}"] = row[col]
+
+    sql = text(  # nosec B608
+        f"INSERT INTO {schema}.{table} ({col_list}) "
+        f"VALUES {', '.join(placeholders)} "
+        f"ON CONFLICT (est_id) DO NOTHING "
+        f"RETURNING est_id"
+    )
+
+    with get_engine().begin() as conn:
+        result = conn.execute(sql, params)
+        return [row[0] for row in result.fetchall()]
 
 
 # ── Per-estimate fetch ────────────────────────────────────────────────────────
@@ -232,6 +254,12 @@ def fetch_estimate_details(
 
     est_line_df = pd.concat([df for df in all_lines  if not df.empty and not df.isna().all(axis=None)], ignore_index=True)
     subtot_df   = pd.concat([df for df in all_subtot if not df.empty and not df.isna().all(axis=None)], ignore_index=True)
+
+    # ── Merge claim_number from search results ────────────────────────────────
+    if "claim_number" in est_ids_df.columns:
+        claim_map = est_ids_df[["est_id", "claim_number"]].drop_duplicates("est_id")
+        est_line_df = est_line_df.merge(claim_map, on="est_id", how="left")
+        subtot_df   = subtot_df.merge(claim_map, on="est_id", how="left")
 
     log.info(
         "API load complete: %d line rows, %d subtotal rows, %d unique est_ids",
