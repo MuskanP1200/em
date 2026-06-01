@@ -8,7 +8,7 @@ from vehicle_verification.ocr import init_azure_vision
 from vehicle_verification.vlm_classifier import init_classifier
 from vehicle_verification.processing import process_est_prefix
 from vehicle_verification.utils import read_config
-from vehicle_verification.db_writer import DBWriter
+from vehicle_verification.db_writer import DBWriter, ensure_vi_tables, reset_vi_tables
 from settings import get_settings
 from storage import get_container_client
 from sql_connection import get_engine
@@ -77,16 +77,6 @@ def run_vi_pipeline(est_id: str) -> int:
     cfg = _full_cfg["vehicle_verification"]
     _t = _full_cfg["tables"]
     staging_table = f"{_t['schema']}.{_t['staging']['est_raw']}"
-
-    _schema = _t["schema"]
-    out_cfg = _t["vi_output"]
-    if not out_cfg.get("folders_table") or not out_cfg.get("images_table"):
-        logger.error(
-            "Config error: tables.vi_output.folders_table or images_table is empty"
-        )
-        return 2
-    folders_table = f"{_schema}.{out_cfg['folders_table']}"
-    images_table = f"{_schema}.{out_cfg['images_table']}"
 
     # ── Parallelism ───────────────────────────────────────────────────
     par_cfg = cfg.get("parallelism", {})
@@ -168,8 +158,8 @@ def run_vi_pipeline(est_id: str) -> int:
     inflight_sem = threading.Semaphore(max_inflight_images)
 
     # ── DB writer ─────────────────────────────────────────────────────
-    db = DBWriter(folders_table=folders_table, images_table=images_table)
-    db.ensure_tables()
+    ensure_vi_tables()
+    db = DBWriter()
 
     # ── Process the folder ────────────────────────────────────────────
     try:
