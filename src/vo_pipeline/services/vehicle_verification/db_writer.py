@@ -1,22 +1,19 @@
-# ================================================================================
-# FILE: db_writer.py
-# ================================================================================
 """
 db_writer.py
 ____________________________________________
 
 Database writer for the vehicle indicator pipeline.
 
-Table names are passed in at construction time from the pipeline config.
+Mirrors the structure of estimate_matching/db_writer.py:
+  - DDL defined as module-level constants (_DDL_FOLDERS, _DDL_IMAGES)
+  - ensure_vi_tables() / reset_vi_tables() as standalone functions
+  - DBWriter class holds only upsert logic
 
 Usage in vi_pipeline.py:
-    from db_writer import DBWriter
+    from vehicle_verification.db_writer import DBWriter, ensure_vi_tables
 
-    db = DBWriter(
-        folders_table=out_cfg["folders_table"],
-        images_table=out_cfg["images_table"],
-    )
-    db.ensure_tables()
+    ensure_vi_tables()
+    db = DBWriter()
     db.upsert_folder(result)   # called per-folder after process_est_prefix()
 """
 
@@ -24,9 +21,11 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any, Dict, List
 
 import numpy as np
+import yaml
 from sqlalchemy import text
 
 from sql_connection import get_engine
@@ -35,78 +34,35 @@ logger = logging.getLogger(__name__)
 
 _CHUNK_SIZE = 500  # rows per bulk INSERT — keeps param count well under psycopg2's 65 535 limit
 
+# ── Config ────────────────────────────────────────────────────────────────────
 
-def _py_native(val):
-    """Convert numpy types to Python natives for SQLAlchemy."""
-    if isinstance(val, np.integer):
-        return int(val)
-    if isinstance(val, np.floating):
-        return float(val)
-    if isinstance(val, np.bool_):
-        return bool(val)
-    return val
+_cfg = yaml.safe_load((Path(__file__).resolve().parent.parent / "config.yaml").read_text())
+_vi_out = _cfg["tables"]["vi_output"]
 
+OUTPUT_SCHEMA: str = _cfg["tables"]["schema"]
+_FOLDERS_NAME: str = _vi_out["folders_table"]
+_IMAGES_NAME: str  = _vi_out["images_table"]
+FOLDERS_TABLE: str = f"{OUTPUT_SCHEMA}.{_FOLDERS_NAME}"
+IMAGES_TABLE: str  = f"{OUTPUT_SCHEMA}.{_IMAGES_NAME}"
 
-def _to_json(val) -> str | None:
-    """Serialize a value to a JSON string for JSONB columns; None stays NULL."""
-    if val is None:
-        return None
-    return json.dumps(val)
+# ── Explicit DDL ──────────────────────────────────────────────────────────────
+# Only drop the orphaned composite type when the TABLE does not exist.
+# PostgreSQL creates a row type alongside every table; if the table was
+# previously dropped without CASCADE the type lingers and blocks the next
+# CREATE TABLE.  Dropping it unconditionally would fail when the table is
+# still present (DependentObjectsStillExist).
 
-
-# ----------------------------------------------------------------------
-# DB WRITER CLASS
-# ----------------------------------------------------------------------
-
-
-class DBWriter:
-    """
-    Database writer for the vehicle indicator pipeline.
-
-    Uses the shared SQLAlchemy engine from sql_connection so connection
-    pooling and credentials are managed in one place, consistent with
-    the estimate_matching pipeline.
-
-    Table names come from the YAML config so the same code can target
-    different schemas without code changes.
-    """
-
-    def __init__(self, folders_table: str, images_table: str):
-        self._folders_table = folders_table
-        self._images_table = images_table
-        _base = images_table.split(".")[-1]
-        self._pk_constraint_name = f"{_base}_pk"
-        self._fk_constraint_name = f"{_base}_folders_fk"
-
-        # Build all SQL strings once, using the configured table names
-        self._create_folders_sql = self._make_create_folders_sql()  # nosec B608
-        self._create_images_sql = self._make_create_images_sql()  # nosec B608
-        self._upsert_folder_sql = self._make_upsert_folder_sql()  # nosec B608
-
-    # ------------------------------------------------------------------
-    # SQL builders (called once in __init__)
-    # ------------------------------------------------------------------
-
-    def _make_create_folders_sql(self) -> str:
-        t = self._folders_table
-        type_name = t.split(".")[-1]
-        schema    = t.split(".")[0] if "." in t else "public"
-        # Only drop the orphaned composite type when the TABLE does not exist.
-        # PostgreSQL creates a row type alongside every table; if the table was
-        # previously dropped without CASCADE the type lingers and blocks the next
-        # CREATE TABLE.  Dropping it unconditionally would fail when the table is
-        # still present (DependentObjectsStillExist).
-        return f"""
+_DDL_FOLDERS = f"""
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.tables
-        WHERE table_schema = '{schema}' AND table_name = '{type_name}'
+        WHERE table_schema = '{OUTPUT_SCHEMA}' AND table_name = '{_FOLDERS_NAME}'
     ) THEN
-        DROP TYPE IF EXISTS {schema}.{type_name};
+        DROP TYPE IF EXISTS {OUTPUT_SCHEMA}.{_FOLDERS_NAME};
     END IF;
 END $$;
-CREATE TABLE IF NOT EXISTS {t} (
+CREATE TABLE IF NOT EXISTS {FOLDERS_TABLE} (
     folder_name                         TEXT PRIMARY KEY,
     est_id                              TEXT,
     folder_path                         TEXT,
@@ -156,27 +112,20 @@ CREATE TABLE IF NOT EXISTS {t} (
     est_odometer_min_mismatches         DOUBLE PRECISION,
     processed_at                        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     update_timestamp                    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+)
 """
 
-    def _make_create_images_sql(self) -> str:
-        t = self._images_table
-        ft = self._folders_table
-        pk = self._pk_constraint_name
-        fk = self._fk_constraint_name
-        type_name = t.split(".")[-1]
-        schema    = t.split(".")[0] if "." in t else "public"
-        return f"""
+_DDL_IMAGES = f"""
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.tables
-        WHERE table_schema = '{schema}' AND table_name = '{type_name}'
+        WHERE table_schema = '{OUTPUT_SCHEMA}' AND table_name = '{_IMAGES_NAME}'
     ) THEN
-        DROP TYPE IF EXISTS {schema}.{type_name};
+        DROP TYPE IF EXISTS {OUTPUT_SCHEMA}.{_IMAGES_NAME};
     END IF;
 END $$;
-CREATE TABLE IF NOT EXISTS {t} (
+CREATE TABLE IF NOT EXISTS {IMAGES_TABLE} (
     folder_name                             TEXT NOT NULL,
     image_path                              TEXT NOT NULL,
 
@@ -224,18 +173,14 @@ CREATE TABLE IF NOT EXISTS {t} (
     processed_at                            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     update_timestamp                        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT {fk}
-        FOREIGN KEY (folder_name) REFERENCES {ft}(folder_name)
-        ON DELETE CASCADE,
-
-    CONSTRAINT {pk} PRIMARY KEY (folder_name, image_path)
-);
+    PRIMARY KEY (folder_name, image_path)
+)
 """
 
-    def _make_upsert_folder_sql(self) -> str:
-        t = self._folders_table  # nosec B608
-        return f"""
-INSERT INTO {t} (
+# ── Upsert SQL ────────────────────────────────────────────────────────────────
+
+_UPSERT_FOLDER_SQL = f"""
+INSERT INTO {FOLDERS_TABLE} (
     folder_name, est_id, folder_path, total_files, images, thumbnails,
     images_excl_thumbs, pdfs, others, count_images_with_text,
     count_images_without_text, vin_status, plate_status, odometer_status,
@@ -309,21 +254,68 @@ ON CONFLICT (folder_name) DO UPDATE SET
     count_images_with_odometer_in_vlm   = EXCLUDED.count_images_with_odometer_in_vlm,
     est_best_match_odometer             = EXCLUDED.est_best_match_odometer,
     est_odometer_min_mismatches         = EXCLUDED.est_odometer_min_mismatches,
-    update_timestamp                    = NOW();
+    update_timestamp                    = NOW()
 """  # nosec B608
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+
+# ── Table management ──────────────────────────────────────────────────────────
+
+
+def reset_vi_tables() -> None:
+    """Drop and recreate both VI output tables. Use during development/testing."""
+    with get_engine().begin() as conn:
+        conn.execute(text(f"DROP TABLE IF EXISTS {IMAGES_TABLE} CASCADE"))
+        conn.execute(text(f"DROP TABLE IF EXISTS {FOLDERS_TABLE} CASCADE"))
+        logger.info("Dropped VI output tables: %s, %s", FOLDERS_TABLE, IMAGES_TABLE)
+    ensure_vi_tables()
+
+
+def ensure_vi_tables() -> None:
+    """Create VI output tables with explicit schema if they do not yet exist."""
+    with get_engine().begin() as conn:
+        conn.execute(text(_DDL_FOLDERS))
+        conn.execute(text(_DDL_IMAGES))
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _py_native(val):
+    """Convert numpy types to Python natives for SQLAlchemy."""
+    if isinstance(val, np.integer):
+        return int(val)
+    if isinstance(val, np.floating):
+        return float(val)
+    if isinstance(val, np.bool_):
+        return bool(val)
+    return val
+
+
+def _to_json(val) -> str | None:
+    """Serialize a value to a JSON string for JSONB columns; None stays NULL."""
+    if val is None:
+        return None
+    return json.dumps(val)
+
+
+# ── DB Writer class ───────────────────────────────────────────────────────────
+
+
+class DBWriter:
+    """
+    Database writer for the vehicle indicator pipeline.
+
+    Uses the shared SQLAlchemy engine from sql_connection so connection
+    pooling and credentials are managed in one place, consistent with
+    the estimate_matching pipeline.
+
+    Table names and DDL are defined as module-level constants above.
+    This class handles only upsert logic.
+    """
 
     def ensure_tables(self) -> None:
         """Create both output tables if they don't already exist. Call once at startup."""
-        try:
-            with get_engine().begin() as conn:
-                conn.execute(text(self._create_folders_sql))
-                conn.execute(text(self._create_images_sql))
-        except Exception as e:
-            logger.error("DBWriter: table creation failed: %s", e, exc_info=True)
+        ensure_vi_tables()
 
     def upsert_folder(self, result: Dict[str, Any]) -> bool:
         """
@@ -342,17 +334,14 @@ ON CONFLICT (folder_name) DO UPDATE SET
             image_rows = self._build_image_rows(result)
         except Exception as e:
             logger.error(
-                "DBWriter: failed to build rows for %s: %s",
-                folder_name,
-                e,
-                exc_info=True,
+                "DBWriter: failed to build rows for %s: %s", folder_name, e, exc_info=True
             )
             return False
 
         try:
             with get_engine().begin() as conn:
-                conn.execute(text(self._upsert_folder_sql), folder_row)
-                self._bulk_upsert_images(conn, image_rows)
+                conn.execute(text(_UPSERT_FOLDER_SQL), folder_row)
+                _bulk_upsert_images(conn, image_rows)
             return True
 
         except Exception as e:
@@ -360,43 +349,6 @@ ON CONFLICT (folder_name) DO UPDATE SET
                 "DBWriter: upsert failed for %s: %s", folder_name, e, exc_info=True
             )
             return False
-
-    def _bulk_upsert_images(self, conn, image_rows: List[Dict[str, Any]]) -> None:
-        """
-        Insert/update image rows in a single multi-row VALUES statement per chunk.
-
-        Builds:  INSERT INTO t (c1, c2, ...) VALUES (:c1_0, :c2_0, ...), (:c1_1, ...)
-                 ON CONFLICT ON CONSTRAINT <pk> DO UPDATE SET ...
-
-        One round trip per _CHUNK_SIZE rows instead of one per row.
-        """
-        if not image_rows:
-            return
-
-        cols = list(image_rows[0].keys())
-        col_list = ", ".join(cols)
-        update_cols = [c for c in cols if c not in ("folder_name", "image_path")]
-        set_clause = (
-            ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
-            + ", update_timestamp = NOW()"
-        )
-
-        for offset in range(0, len(image_rows), _CHUNK_SIZE):
-            chunk = image_rows[offset : offset + _CHUNK_SIZE]
-
-            placeholders: list[str] = []
-            params: dict[str, Any] = {}
-            for i, row in enumerate(chunk):
-                placeholders.append(f"({', '.join(f':{c}_{i}' for c in cols)})")
-                for col in cols:
-                    params[f"{col}_{i}"] = row[col]
-
-            sql = text(  # nosec B608
-                f"INSERT INTO {self._images_table} ({col_list}) "
-                f"VALUES {', '.join(placeholders)} "
-                f"ON CONFLICT ON CONSTRAINT {self._pk_constraint_name} DO UPDATE SET {set_clause}"
-            )
-            conn.execute(sql, params)
 
     def close(self) -> None:
         """No-op — connection lifecycle is managed by the shared SQLAlchemy engine."""
@@ -413,49 +365,49 @@ ON CONFLICT (folder_name) DO UPDATE SET
         vlm = metrics.get("vlm") or {}
 
         row = {
-            "folder_name":                      folder.get("folder_name"),
-            "est_id":                           folder.get("est_id"),
-            "folder_path":                      folder.get("folder_path"),
-            "total_files":                      folder.get("total_files"),
-            "images":                           folder.get("images"),
-            "thumbnails":                       folder.get("thumbnails"),
-            "images_excl_thumbs":               folder.get("images_excl_thumbs"),
-            "pdfs":                             folder.get("pdfs"),
-            "others":                           folder.get("others"),
-            "count_images_with_text":           folder.get("count_images_with_text"),
-            "count_images_without_text":        folder.get("count_images_without_text"),
-            "vin_status":                       folder.get("vin_status"),
-            "plate_status":                     folder.get("plate_status"),
-            "odometer_status":                  folder.get("odometer_status"),
-            "images_with_text":                 _to_json(folder.get("images_with_text")),
-            "images_without_text":              _to_json(folder.get("images_without_text")),
-            "others_list":                      _to_json(folder.get("others_list")),
-            "folder_wall_time_sec":             metrics.get("folder_wall_time_sec"),
-            "az_vision_images_processed":       az_vis.get("images_processed"),
-            "az_vision_total_sec":              az_vis.get("total_sec"),
-            "az_vision_avg_sec_per_image":      az_vis.get("avg_sec_per_image"),
-            "az_vision_ocr_total_cost":         az_vis.get("ocr_cost_total"),
-            "az_vision_ocr_cost_currency":      az_vis.get("ocr_cost_currency"),
-            "vlm_images_classified":            vlm.get("images_classified"),
-            "vlm_total_sec":                    vlm.get("total_sec"),
-            "vlm_avg_sec_per_image":            vlm.get("avg_sec_per_image"),
-            "vlm_api_cost_total":               vlm.get("api_cost_total"),
-            "vlm_api_cost_currency":            vlm.get("api_cost_currency"),
+            "folder_name":                       folder.get("folder_name"),
+            "est_id":                            folder.get("est_id"),
+            "folder_path":                       folder.get("folder_path"),
+            "total_files":                       folder.get("total_files"),
+            "images":                            folder.get("images"),
+            "thumbnails":                        folder.get("thumbnails"),
+            "images_excl_thumbs":                folder.get("images_excl_thumbs"),
+            "pdfs":                              folder.get("pdfs"),
+            "others":                            folder.get("others"),
+            "count_images_with_text":            folder.get("count_images_with_text"),
+            "count_images_without_text":         folder.get("count_images_without_text"),
+            "vin_status":                        folder.get("vin_status"),
+            "plate_status":                      folder.get("plate_status"),
+            "odometer_status":                   folder.get("odometer_status"),
+            "images_with_text":                  _to_json(folder.get("images_with_text")),
+            "images_without_text":               _to_json(folder.get("images_without_text")),
+            "others_list":                       _to_json(folder.get("others_list")),
+            "folder_wall_time_sec":              metrics.get("folder_wall_time_sec"),
+            "az_vision_images_processed":        az_vis.get("images_processed"),
+            "az_vision_total_sec":               az_vis.get("total_sec"),
+            "az_vision_avg_sec_per_image":       az_vis.get("avg_sec_per_image"),
+            "az_vision_ocr_total_cost":          az_vis.get("ocr_cost_total"),
+            "az_vision_ocr_cost_currency":       az_vis.get("ocr_cost_currency"),
+            "vlm_images_classified":             vlm.get("images_classified"),
+            "vlm_total_sec":                     vlm.get("total_sec"),
+            "vlm_avg_sec_per_image":             vlm.get("avg_sec_per_image"),
+            "vlm_api_cost_total":                vlm.get("api_cost_total"),
+            "vlm_api_cost_currency":             vlm.get("api_cost_currency"),
             # VIN
-            "count_images_with_vin_in_ocr":     folder.get("count_images_with_vin_in_ocr"),
-            "count_images_with_vin_in_vlm":     folder.get("count_images_with_vin_in_vlm"),
-            "est_best_match_vin":               folder.get("est_best_match_vin"),
-            "est_vin_min_mismatches":           folder.get("est_vin_min_mismatches"),
+            "count_images_with_vin_in_ocr":      folder.get("count_images_with_vin_in_ocr"),
+            "count_images_with_vin_in_vlm":      folder.get("count_images_with_vin_in_vlm"),
+            "est_best_match_vin":                folder.get("est_best_match_vin"),
+            "est_vin_min_mismatches":            folder.get("est_vin_min_mismatches"),
             # Plate
-            "count_images_with_plate_in_ocr":   folder.get("count_images_with_plate_in_ocr"),
-            "count_images_with_plate_in_vlm":   folder.get("count_images_with_plate_in_vlm"),
-            "est_best_match_plate":             folder.get("est_best_match_plate"),
-            "est_plate_min_mismatches":         folder.get("est_plate_min_mismatches"),
+            "count_images_with_plate_in_ocr":    folder.get("count_images_with_plate_in_ocr"),
+            "count_images_with_plate_in_vlm":    folder.get("count_images_with_plate_in_vlm"),
+            "est_best_match_plate":              folder.get("est_best_match_plate"),
+            "est_plate_min_mismatches":          folder.get("est_plate_min_mismatches"),
             # Odometer
             "count_images_with_odometer_in_ocr": folder.get("count_images_with_odometer_in_ocr"),
             "count_images_with_odometer_in_vlm": folder.get("count_images_with_odometer_in_vlm"),
-            "est_best_match_odometer":          folder.get("est_best_match_odometer"),
-            "est_odometer_min_mismatches":      folder.get("est_odometer_min_mismatches"),
+            "est_best_match_odometer":           folder.get("est_best_match_odometer"),
+            "est_odometer_min_mismatches":       folder.get("est_odometer_min_mismatches"),
         }
         return {k: _py_native(v) for k, v in row.items()}
 
@@ -517,3 +469,44 @@ ON CONFLICT (folder_name) DO UPDATE SET
             rows.append({k: _py_native(v) for k, v in row_dict.items()})
 
         return rows
+
+
+# ── Bulk image upsert (module-level — no instance state needed) ───────────────
+
+
+def _bulk_upsert_images(conn, image_rows: List[Dict[str, Any]]) -> None:
+    """
+    Insert/update image rows in a single multi-row VALUES statement per chunk.
+
+    Builds:  INSERT INTO t (c1, c2, ...) VALUES (:c1_0, :c2_0, ...), (:c1_1, ...)
+             ON CONFLICT ON CONSTRAINT <pk> DO UPDATE SET ...
+
+    One round trip per _CHUNK_SIZE rows instead of one per row.
+    """
+    if not image_rows:
+        return
+
+    cols = list(image_rows[0].keys())
+    col_list = ", ".join(cols)
+    update_cols = [c for c in cols if c not in ("folder_name", "image_path")]
+    set_clause = (
+        ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+        + ", update_timestamp = NOW()"
+    )
+
+    for offset in range(0, len(image_rows), _CHUNK_SIZE):
+        chunk = image_rows[offset : offset + _CHUNK_SIZE]
+
+        placeholders: list[str] = []
+        params: dict[str, Any] = {}
+        for i, row in enumerate(chunk):
+            placeholders.append(f"({', '.join(f':{c}_{i}' for c in cols)})")
+            for col in cols:
+                params[f"{col}_{i}"] = row[col]
+
+        sql = text(  # nosec B608
+            f"INSERT INTO {IMAGES_TABLE} ({col_list}) "
+            f"VALUES {', '.join(placeholders)} "
+            f"ON CONFLICT (folder_name, image_path) DO UPDATE SET {set_clause}"
+        )
+        conn.execute(sql, params)
