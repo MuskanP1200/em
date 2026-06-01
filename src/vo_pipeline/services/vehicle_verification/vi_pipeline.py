@@ -1,26 +1,18 @@
 from __future__ import annotations
 
-import sys
 import logging
 import threading
-from pathlib import Path
 from typing import Optional
 
-import psycopg2
-import psycopg2.extras
-
-PROJECT_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
-from ocr import init_azure_vision  # noqa: E402
-from vlm_classifier import init_classifier  # noqa: E402
-from processing import process_est_prefix  # noqa: E402
-from utils import read_config  # noqa: E402
-from db_writer import DBWriter  # noqa: E402
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from settings import get_settings  # noqa: E402
-from storage import get_container_client  # noqa: E402
+from vehicle_verification.ocr import init_azure_vision
+from vehicle_verification.vlm_classifier import init_classifier
+from vehicle_verification.processing import process_est_prefix
+from vehicle_verification.utils import read_config
+from vehicle_verification.db_writer import DBWriter
+from settings import get_settings
+from storage import get_container_client
+from sql_connection import get_engine
+from sqlalchemy import text
 
 CONFIG_PATH = PROJECT_ROOT.parent / "config.yaml"  # services/config.yaml
 
@@ -28,7 +20,7 @@ logger = logging.getLogger("vi_pipeline")
 
 
 def _fetch_est_record(
-    conn, col_map: dict, staging_table: str, est_id: str
+    col_map: dict, staging_table: str, est_id: str
 ) -> Optional[dict]:
     """
     Query the staging table for a single EST record by its ID column.
@@ -51,13 +43,12 @@ def _fetch_est_record(
     sql = (  # nosec B608
         f"SELECT {', '.join(select_parts)} "  # nosec B608
         f"FROM {staging_table} "  # nosec B608
-        f"WHERE {id_col} = %s "  # nosec B608
+        f"WHERE {id_col} = :est_id "  # nosec B608
         f"LIMIT 1"  # nosec B608
     )  # nosec B608
 
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute(sql, (est_id,))
-        row = cur.fetchone()
+    with get_engine().connect() as conn:
+        row = conn.execute(text(sql), {"est_id": est_id}).mappings().first()
 
     return dict(row) if row else None
 
@@ -97,8 +88,6 @@ def run_vi_pipeline(est_id: str) -> int:
     folders_table = f"{_schema}.{out_cfg['folders_table']}"
     images_table = f"{_schema}.{out_cfg['images_table']}"
 
-    secrets = get_settings().model_dump()
-
     # ── Parallelism ───────────────────────────────────────────────────
     par_cfg = cfg.get("parallelism", {})
     folder_workers = int(par_cfg.get("folder_workers", 3))
@@ -108,26 +97,9 @@ def run_vi_pipeline(est_id: str) -> int:
     max_inflight_images = int(par_cfg.get("max_inflight_images", 50))
     pool_size = max(folder_workers * image_workers, max_inflight_images)
 
-    # ── Connect to PostgreSQL ─────────────────────────────────────────
-    pg_cfg = {
-        "host": secrets["POSTGRES_HOST"],
-        "port": secrets["POSTGRES_PORT"],
-        "dbname": secrets["POSTGRES_DB"],
-        "user": secrets["POSTGRES_USER"],
-        "password": secrets["POSTGRESQL_PASSWORD"],
-    }
-
-    try:
-        input_conn = psycopg2.connect(**pg_cfg)
-    except Exception as exc:
-        logger.error("Failed to connect to PostgreSQL: %s", exc, exc_info=True)
-        return 2
-
     # ── Fetch EST record ──────────────────────────────────────────────
     try:
-        record = _fetch_est_record(
-            input_conn, cfg["input_columns"], staging_table, est_id
-        )
+        record = _fetch_est_record(cfg["input_columns"], staging_table, est_id)
     except Exception as exc:
         logger.error(
             "Failed to query staging table for est_id=%s: %s",
@@ -136,8 +108,6 @@ def run_vi_pipeline(est_id: str) -> int:
             exc_info=True,
         )
         return 2
-    finally:
-        input_conn.close()
 
     if not record:
         logger.error("No record found for est_id=%s — nothing to process.", est_id)
@@ -151,6 +121,8 @@ def run_vi_pipeline(est_id: str) -> int:
     if not prefix:
         logger.error("est_id=%s has an empty blob prefix — nothing to process.", est_id)
         return 1
+
+    secrets = get_settings().model_dump()
 
     # ── Azure Blob Storage ────────────────────────────────────────────
     try:
@@ -196,14 +168,7 @@ def run_vi_pipeline(est_id: str) -> int:
     inflight_sem = threading.Semaphore(max_inflight_images)
 
     # ── DB writer ─────────────────────────────────────────────────────
-    db = DBWriter(
-        pg_cfg=pg_cfg,
-        folders_table=folders_table,
-        images_table=images_table,
-    )
-    if not db.is_connected:
-        logger.error("DBWriter failed to connect to PostgreSQL. Aborting.")
-        return 2
+    db = DBWriter(folders_table=folders_table, images_table=images_table)
     db.ensure_tables()
 
     # ── Process the folder ────────────────────────────────────────────
