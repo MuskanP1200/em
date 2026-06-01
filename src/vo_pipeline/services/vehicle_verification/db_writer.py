@@ -65,6 +65,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS {FOLDERS_TABLE} (
     folder_name                         TEXT PRIMARY KEY,
     est_id                              TEXT,
+    claim_number                        TEXT,
     folder_path                         TEXT,
 
     total_files                         INTEGER,
@@ -181,7 +182,7 @@ CREATE TABLE IF NOT EXISTS {IMAGES_TABLE} (
 
 _UPSERT_FOLDER_SQL = f"""
 INSERT INTO {FOLDERS_TABLE} (
-    folder_name, est_id, folder_path, total_files, images, thumbnails,
+    folder_name, est_id, claim_number, folder_path, total_files, images, thumbnails,
     images_excl_thumbs, pdfs, others, count_images_with_text,
     count_images_without_text, vin_status, plate_status, odometer_status,
     images_with_text, images_without_text, others_list,
@@ -198,7 +199,7 @@ INSERT INTO {FOLDERS_TABLE} (
     est_best_match_odometer, est_odometer_min_mismatches
 )
 VALUES (
-    :folder_name, :est_id, :folder_path, :total_files, :images, :thumbnails,
+    :folder_name, :est_id, :claim_number, :folder_path, :total_files, :images, :thumbnails,
     :images_excl_thumbs, :pdfs, :others, :count_images_with_text,
     :count_images_without_text, :vin_status, :plate_status, :odometer_status,
     :images_with_text, :images_without_text, :others_list,
@@ -216,6 +217,7 @@ VALUES (
 )
 ON CONFLICT (folder_name) DO UPDATE SET
     est_id                              = EXCLUDED.est_id,
+    claim_number                        = EXCLUDED.claim_number,
     folder_path                         = EXCLUDED.folder_path,
     total_files                         = EXCLUDED.total_files,
     images                              = EXCLUDED.images,
@@ -367,6 +369,7 @@ class DBWriter:
         row = {
             "folder_name":                       folder.get("folder_name"),
             "est_id":                            folder.get("est_id"),
+            "claim_number":                      folder.get("claim_number"),
             "folder_path":                       folder.get("folder_path"),
             "total_files":                       folder.get("total_files"),
             "images":                            folder.get("images"),
