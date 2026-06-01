@@ -28,7 +28,7 @@ _BOOL_COLS_SUBTOT = ["overcharged", "undercharged"]
 # ── Explicit DDL ──────────────────────────────────────────────────────────────
 _DDL_EST_SUMMARY = f"""
 CREATE TABLE IF NOT EXISTS {OUTPUT_SCHEMA}.{TABLE_EST_SUMMARY} (
-    est_id                BIGINT,
+    est_id                BIGINT UNIQUE,
     est_tot_amt           DOUBLE PRECISION,
     lbr_hr_qty            DOUBLE PRECISION,
     grp_nbr               TEXT,
@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS {OUTPUT_SCHEMA}.{TABLE_EST_SUMMARY} (
     parts_line_issues     INTEGER,
     under_discount_lines  INTEGER,
     lbr_issues            INTEGER,
-    estimate_match        TEXT
+    estimate_match        TEXT,
+    update_timestamp      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )
 """
 
@@ -87,7 +88,8 @@ CREATE TABLE IF NOT EXISTS {OUTPUT_SCHEMA}.{TABLE_LINE_DETAIL} (
     discount_variance           DOUBLE PRECISION,
     discount_direction          TEXT,
     finding                     TEXT,
-    other_charges_match         TEXT
+    other_charges_match         TEXT,
+    update_timestamp            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )
 """
 
@@ -113,6 +115,12 @@ CREATE TABLE IF NOT EXISTS {OUTPUT_SCHEMA}.{TABLE_SUBTOT_DETAIL} (
     overall_lbr_match           TEXT,
     overcharged                 BOOLEAN,
     undercharged                BOOLEAN,
+    paint_tot_amt               DOUBLE PRECISION,
+    refinish_hrs                DOUBLE PRECISION,
+    expected_paint_rate         DOUBLE PRECISION,
+    actual_paint_rate           DOUBLE PRECISION,
+    paint_rate_match            TEXT,
+    paint_rate_direction        TEXT,
     bdy_lbr_rate                DOUBLE PRECISION,
     mchncl_lbr_rate             DOUBLE PRECISION,
     frm_lbr_rate                DOUBLE PRECISION,
@@ -121,7 +129,8 @@ CREATE TABLE IF NOT EXISTS {OUTPUT_SCHEMA}.{TABLE_SUBTOT_DETAIL} (
     frn_part_disc_amt           DOUBLE PRECISION,
     kyls_disc_amt               DOUBLE PRECISION,
     specl_instruct_txt          TEXT,
-    grp_note_txt                TEXT
+    grp_note_txt                TEXT,
+    update_timestamp            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )
 """
 
@@ -151,10 +160,8 @@ def ensure_em_tables() -> None:
 
 def _sanitise(df: pd.DataFrame) -> pd.DataFrame:
     """Replace null-like strings with NaN so Postgres float columns don't choke."""
-    null_map = {s: np.nan for s in _NULL_STRINGS} | {
-        s.upper(): np.nan for s in _NULL_STRINGS
-    }
-    return df.replace(null_map).infer_objects(copy=False)
+    null_strings = {s for s in _NULL_STRINGS} | {s.upper() for s in _NULL_STRINGS}
+    return df.where(~df.isin(null_strings), other=np.nan)
 
 
 def _cast_output_dtypes(
@@ -181,13 +188,12 @@ def save_results(
     est_summary: pd.DataFrame,
     subtot_detail: pd.DataFrame,
     line_detail: pd.DataFrame,
-    if_exists: str = "replace",
 ) -> None:
     """Persist the three EM output tables to Postgres.
 
-    Tables are created with explicit DDL on first call so column types are
-    always correct. ``if_exists='replace'`` truncates existing data while
-    preserving the schema; ``if_exists='append'`` just inserts.
+    Each call deletes any existing rows for the est_ids in this batch before
+    inserting, so re-running the pipeline on the same estimates overwrites
+    rather than duplicates. Results for other est_ids are left untouched.
     """
     ensure_em_tables()
 
@@ -197,18 +203,15 @@ def save_results(
         _sanitise(line_detail),
     )
 
-    if if_exists == "replace":
+    est_ids = est_summary["est_id"].dropna().unique().tolist()
+    if est_ids:
         with get_engine().begin() as conn:
-            conn.execute(text(f"TRUNCATE TABLE {OUTPUT_SCHEMA}.{TABLE_EST_SUMMARY}"))
-            conn.execute(text(f"TRUNCATE TABLE {OUTPUT_SCHEMA}.{TABLE_SUBTOT_DETAIL}"))
-            conn.execute(text(f"TRUNCATE TABLE {OUTPUT_SCHEMA}.{TABLE_LINE_DETAIL}"))
+            for table in [TABLE_EST_SUMMARY, TABLE_SUBTOT_DETAIL, TABLE_LINE_DETAIL]:
+                conn.execute(
+                    text(f"DELETE FROM {OUTPUT_SCHEMA}.{table} WHERE est_id = ANY(:ids)"),  # nosec B608
+                    {"ids": est_ids},
+                )
 
-    write_table(
-        est_summary, TABLE_EST_SUMMARY, schema=OUTPUT_SCHEMA, if_exists="append"
-    )
-    write_table(
-        subtot_detail, TABLE_SUBTOT_DETAIL, schema=OUTPUT_SCHEMA, if_exists="append"
-    )
-    write_table(
-        line_detail, TABLE_LINE_DETAIL, schema=OUTPUT_SCHEMA, if_exists="append"
-    )
+    write_table(est_summary,   TABLE_EST_SUMMARY,   schema=OUTPUT_SCHEMA, if_exists="append")
+    write_table(subtot_detail, TABLE_SUBTOT_DETAIL, schema=OUTPUT_SCHEMA, if_exists="append")
+    write_table(line_detail,   TABLE_LINE_DETAIL,   schema=OUTPUT_SCHEMA, if_exists="append")
