@@ -33,6 +33,8 @@ from sql_connection import get_engine
 
 logger = logging.getLogger(__name__)
 
+_CHUNK_SIZE = 500  # rows per bulk INSERT — keeps param count well under psycopg2's 65 535 limit
+
 
 def _py_native(val):
     """Convert numpy types to Python natives for SQLAlchemy."""
@@ -80,7 +82,6 @@ class DBWriter:
         self._create_folders_sql = self._make_create_folders_sql()  # nosec B608
         self._create_images_sql = self._make_create_images_sql()  # nosec B608
         self._upsert_folder_sql = self._make_upsert_folder_sql()  # nosec B608
-        self._upsert_image_sql = self._make_upsert_image_sql()  # nosec B608
 
     # ------------------------------------------------------------------
     # SQL builders (called once in __init__)
@@ -311,82 +312,6 @@ ON CONFLICT (folder_name) DO UPDATE SET
     update_timestamp                    = NOW();
 """  # nosec B608
 
-    def _make_upsert_image_sql(self) -> str:
-        t = self._images_table
-        pk = self._pk_constraint_name
-        return f"""
-INSERT INTO {t} (
-    folder_name, image_path,
-    text_detected, ocr_success, error,
-    raw_ocr_text, extracted_text, classified_label, classified_confidence,
-    classification_error,
-    vin_ocr_match, vin_vlm_match, best_match_vin_ocr, best_match_vin_vlm,
-    ocr_vin_mismatch_count, vlm_vin_mismatch_count,
-    vin_ocr_checksum_substitution_promoted, vin_ocr_checksum_substitution_pos,
-    vin_vlm_checksum_substitution_promoted, vin_vlm_checksum_substitution_pos,
-    plate_ocr_match, plate_vlm_match, best_match_plate_ocr, best_match_plate_vlm,
-    plate_ocr_mismatch_count, plate_vlm_mismatch_count,
-    odometer_ocr_match, odometer_vlm_match, best_match_odometer_ocr, best_match_odometer_vlm,
-    odometer_ocr_mismatch_count, odometer_vlm_mismatch_count,
-    az_vision_time_sec, vlm_time_sec, vlm_api_cost, vlm_api_cost_currency,
-    vlm_usage, image_json
-)
-VALUES (
-    :folder_name, :image_path,
-    :text_detected, :ocr_success, :error,
-    :raw_ocr_text, :extracted_text, :classified_label, :classified_confidence,
-    :classification_error,
-    :vin_ocr_match, :vin_vlm_match, :best_match_vin_ocr, :best_match_vin_vlm,
-    :ocr_vin_mismatch_count, :vlm_vin_mismatch_count,
-    :vin_ocr_checksum_substitution_promoted, :vin_ocr_checksum_substitution_pos,
-    :vin_vlm_checksum_substitution_promoted, :vin_vlm_checksum_substitution_pos,
-    :plate_ocr_match, :plate_vlm_match, :best_match_plate_ocr, :best_match_plate_vlm,
-    :plate_ocr_mismatch_count, :plate_vlm_mismatch_count,
-    :odometer_ocr_match, :odometer_vlm_match, :best_match_odometer_ocr, :best_match_odometer_vlm,
-    :odometer_ocr_mismatch_count, :odometer_vlm_mismatch_count,
-    :az_vision_time_sec, :vlm_time_sec, :vlm_api_cost, :vlm_api_cost_currency,
-    :vlm_usage, :image_json
-)
-ON CONFLICT ON CONSTRAINT {pk} DO UPDATE SET
-    text_detected                           = EXCLUDED.text_detected,
-    ocr_success                             = EXCLUDED.ocr_success,
-    error                                   = EXCLUDED.error,
-    raw_ocr_text                            = EXCLUDED.raw_ocr_text,
-    extracted_text                          = EXCLUDED.extracted_text,
-    classified_label                        = EXCLUDED.classified_label,
-    classified_confidence                   = EXCLUDED.classified_confidence,
-    classification_error                    = EXCLUDED.classification_error,
-    vin_ocr_match                           = EXCLUDED.vin_ocr_match,
-    vin_vlm_match                           = EXCLUDED.vin_vlm_match,
-    best_match_vin_ocr                      = EXCLUDED.best_match_vin_ocr,
-    best_match_vin_vlm                      = EXCLUDED.best_match_vin_vlm,
-    ocr_vin_mismatch_count                  = EXCLUDED.ocr_vin_mismatch_count,
-    vlm_vin_mismatch_count                  = EXCLUDED.vlm_vin_mismatch_count,
-    vin_ocr_checksum_substitution_promoted  = EXCLUDED.vin_ocr_checksum_substitution_promoted,
-    vin_ocr_checksum_substitution_pos       = EXCLUDED.vin_ocr_checksum_substitution_pos,
-    vin_vlm_checksum_substitution_promoted  = EXCLUDED.vin_vlm_checksum_substitution_promoted,
-    vin_vlm_checksum_substitution_pos       = EXCLUDED.vin_vlm_checksum_substitution_pos,
-    plate_ocr_match                         = EXCLUDED.plate_ocr_match,
-    plate_vlm_match                         = EXCLUDED.plate_vlm_match,
-    best_match_plate_ocr                    = EXCLUDED.best_match_plate_ocr,
-    best_match_plate_vlm                    = EXCLUDED.best_match_plate_vlm,
-    plate_ocr_mismatch_count                = EXCLUDED.plate_ocr_mismatch_count,
-    plate_vlm_mismatch_count                = EXCLUDED.plate_vlm_mismatch_count,
-    odometer_ocr_match                      = EXCLUDED.odometer_ocr_match,
-    odometer_vlm_match                      = EXCLUDED.odometer_vlm_match,
-    best_match_odometer_ocr                 = EXCLUDED.best_match_odometer_ocr,
-    best_match_odometer_vlm                 = EXCLUDED.best_match_odometer_vlm,
-    odometer_ocr_mismatch_count             = EXCLUDED.odometer_ocr_mismatch_count,
-    odometer_vlm_mismatch_count             = EXCLUDED.odometer_vlm_mismatch_count,
-    az_vision_time_sec                      = EXCLUDED.az_vision_time_sec,
-    vlm_time_sec                            = EXCLUDED.vlm_time_sec,
-    vlm_api_cost                            = EXCLUDED.vlm_api_cost,
-    vlm_api_cost_currency                   = EXCLUDED.vlm_api_cost_currency,
-    vlm_usage                               = EXCLUDED.vlm_usage,
-    image_json                              = EXCLUDED.image_json,
-    update_timestamp                        = NOW();
-"""  # nosec B608
-
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -427,8 +352,7 @@ ON CONFLICT ON CONSTRAINT {pk} DO UPDATE SET
         try:
             with get_engine().begin() as conn:
                 conn.execute(text(self._upsert_folder_sql), folder_row)
-                if image_rows:
-                    conn.execute(text(self._upsert_image_sql), image_rows)
+                self._bulk_upsert_images(conn, image_rows)
             return True
 
         except Exception as e:
@@ -436,6 +360,43 @@ ON CONFLICT ON CONSTRAINT {pk} DO UPDATE SET
                 "DBWriter: upsert failed for %s: %s", folder_name, e, exc_info=True
             )
             return False
+
+    def _bulk_upsert_images(self, conn, image_rows: List[Dict[str, Any]]) -> None:
+        """
+        Insert/update image rows in a single multi-row VALUES statement per chunk.
+
+        Builds:  INSERT INTO t (c1, c2, ...) VALUES (:c1_0, :c2_0, ...), (:c1_1, ...)
+                 ON CONFLICT ON CONSTRAINT <pk> DO UPDATE SET ...
+
+        One round trip per _CHUNK_SIZE rows instead of one per row.
+        """
+        if not image_rows:
+            return
+
+        cols = list(image_rows[0].keys())
+        col_list = ", ".join(cols)
+        update_cols = [c for c in cols if c not in ("folder_name", "image_path")]
+        set_clause = (
+            ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+            + ", update_timestamp = NOW()"
+        )
+
+        for offset in range(0, len(image_rows), _CHUNK_SIZE):
+            chunk = image_rows[offset : offset + _CHUNK_SIZE]
+
+            placeholders: list[str] = []
+            params: dict[str, Any] = {}
+            for i, row in enumerate(chunk):
+                placeholders.append(f"({', '.join(f':{c}_{i}' for c in cols)})")
+                for col in cols:
+                    params[f"{col}_{i}"] = row[col]
+
+            sql = text(  # nosec B608
+                f"INSERT INTO {self._images_table} ({col_list}) "
+                f"VALUES {', '.join(placeholders)} "
+                f"ON CONFLICT ON CONSTRAINT {self._pk_constraint_name} DO UPDATE SET {set_clause}"
+            )
+            conn.execute(sql, params)
 
     def close(self) -> None:
         """No-op — connection lifecycle is managed by the shared SQLAlchemy engine."""
