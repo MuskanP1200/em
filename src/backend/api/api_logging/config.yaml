@@ -1,0 +1,37 @@
+version: 1
+formatters:
+  default:
+    format: '%(asctime)s | %(levelname)-8s | %(app_name_field)s | %(name)s | %(message)s'
+    datefmt: '%Y-%m-%dT%H:%M:%S'
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: DEBUG    # Overriden at runtime by configure_logging
+    formatter: default
+root:
+  # THis will be changed by the environment variable anyway
+  level: DEBUG
+  handlers: [console]
+loggers:
+  aiocache:
+    level: INFO
+    propagate: true
+  urllib3:
+    level: INFO
+    propagate: true
+  openai:
+    level: WARNING
+    propagate: true
+  httpx:
+    level: WARNING
+    propagate: true
+  httpcore:
+    level: WARNING
+    propagate: true
+  charset_normalizer:
+    level: WARNING
+    propagate: true
+  azure:
+    level: WARNING
+    propagate: true
+disable_existing_loggers: false

@@ -1,0 +1,43 @@
+version: 1
+formatters:
+  default:
+    format: '%(asctime)s | %(levelname)-8s | est=%(est_id)s | %(app_name_field)s | %(name)s | %(message)s'
+    datefmt: '%Y-%m-%dT%H:%M:%S'
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: DEBUG
+    formatter: default
+  file:
+    class: logging.handlers.RotatingFileHandler
+    level: DEBUG
+    formatter: default
+    filename: logs/pipeline.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 5
+root:
+  level: DEBUG
+  handlers: [console, file]
+loggers:
+  aiocache:
+    level: INFO
+    propagate: true
+  urllib3:
+    level: INFO
+    propagate: true
+  openai:
+    level: WARNING
+    propagate: true
+  httpx:
+    level: WARNING
+    propagate: true
+  httpcore:
+    level: WARNING
+    propagate: true
+  charset_normalizer:
+    level: WARNING
+    propagate: true
+  azure:
+    level: WARNING
+    propagate: true
+disable_existing_loggers: false

@@ -1,0 +1,17 @@
+# =============================================================================
+# config.yaml — Backend table configurations
+# =============================================================================
+tables:
+  schema: container
+  staging: #output from api calls is saved 
+    est_raw:    api_est_imgs    # one row per estimate
+    est_line:  api_est_line     # one row per line item
+    est_subtot: api_est_subtot   # one row per subtotal
+  vi_output:
+    folders_table:      vi_estimate_results
+    images_table:       vi_image_results
+  em_output:
+    line_detail:   em_est_line_dtl
+    subtot_detail: em_est_subtot_dtl
+    est_summary:   em_est_summary
+    overall_summary: est_overall_results
