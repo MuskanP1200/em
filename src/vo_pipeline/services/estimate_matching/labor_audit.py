@@ -171,6 +171,43 @@ def _validate_labour_type(
     }
 
 
+
+
+# ── Line-level labour rate match ──────────────────────────────────────────────
+
+
+def add_line_labour_rate_match(est_line_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add line-level labour rate columns to est_line_df.
+
+    For each line where both dtl_lbr_tot_amt and dtl_lbr_hr_qty are present
+    and non-zero, compute:
+      actual_line_lbr_rate  : dtl_lbr_tot_amt / dtl_lbr_hr_qty
+      expected_line_lbr_rate: CDR contracted rate for this labour type
+      line_lbr_rate_match   : True / False / None if cannot evaluate
+    """
+    df = est_line_df.copy()
+
+    # Actual rate = amount / hours where both are non-zero
+    has_data = df["dtl_lbr_hr_qty"].notna() & df["dtl_lbr_hr_qty"].gt(0) & \
+               df["dtl_lbr_tot_amt"].notna()
+    df["actual_line_lbr_rate"] = None
+    df.loc[has_data, "actual_line_lbr_rate"] = (
+        df.loc[has_data, "dtl_lbr_tot_amt"] / df.loc[has_data, "dtl_lbr_hr_qty"]
+    ).round(ROUND_DECIMALS)
+
+    # Expected rate = CDR rate mapped by labour type
+    df["expected_line_lbr_rate"] = get_unit_cost_by_labor_type(df)
+
+    # Match — only where both rates are available
+    can_compare = df["actual_line_lbr_rate"].notna() & df["expected_line_lbr_rate"].notna()
+    df["line_lbr_rate_match"] = None
+    df.loc[can_compare, "line_lbr_rate_match"] = (
+        df.loc[can_compare, "actual_line_lbr_rate"].round(ROUND_DECIMALS)
+        == df.loc[can_compare, "expected_line_lbr_rate"].round(ROUND_DECIMALS)
+    )
+
+    return df
 # ── Body / Mechanical / Frame / Glass labour matching ────────────────────────
 
 
@@ -357,3 +394,40 @@ def match_labour_refinish(
     )
 
     return [result]
+
+
+# ── Line-level labour rate match ──────────────────────────────────────────────
+
+
+def add_line_labour_rate_match(est_line_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add line-level labour rate columns to est_line_df.
+
+    For each line where both dtl_lbr_tot_amt and dtl_lbr_hr_qty are present
+    and non-zero, compute:
+      actual_line_lbr_rate  : dtl_lbr_tot_amt / dtl_lbr_hr_qty
+      expected_line_lbr_rate: CDR contracted rate for this labour type
+      line_lbr_rate_match   : True / False / None if cannot evaluate
+    """
+    df = est_line_df.copy()
+
+    # Actual rate = amount / hours where both are non-zero
+    has_data = df["dtl_lbr_hr_qty"].notna() & df["dtl_lbr_hr_qty"].gt(0) & \
+               df["dtl_lbr_tot_amt"].notna()
+    df["actual_line_lbr_rate"] = None
+    df.loc[has_data, "actual_line_lbr_rate"] = (
+        df.loc[has_data, "dtl_lbr_tot_amt"] / df.loc[has_data, "dtl_lbr_hr_qty"]
+    ).round(ROUND_DECIMALS)
+
+    # Expected rate = CDR rate mapped by labour type
+    df["expected_line_lbr_rate"] = get_unit_cost_by_labor_type(df)
+
+    # Match — only where both rates are available
+    can_compare = df["actual_line_lbr_rate"].notna() & df["expected_line_lbr_rate"].notna()
+    df["line_lbr_rate_match"] = None
+    df.loc[can_compare, "line_lbr_rate_match"] = (
+        df.loc[can_compare, "actual_line_lbr_rate"].round(ROUND_DECIMALS)
+        == df.loc[can_compare, "expected_line_lbr_rate"].round(ROUND_DECIMALS)
+    )
+
+    return df
