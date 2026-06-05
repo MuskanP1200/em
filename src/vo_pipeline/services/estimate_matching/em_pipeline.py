@@ -42,6 +42,7 @@ from estimate_matching.parts_audit import (  # noqa: E402
 from estimate_matching.labor_audit import (  # noqa: E402
     match_labor_subtotals,
     match_labour_refinish,
+    add_line_labour_rate_match
 )
 from estimate_matching.material_audit import match_paint_subtotals  # noqa: E402
 from estimate_matching.config import (  # noqa: E402
