@@ -159,6 +159,8 @@ def run_em_pipeline(
         / est_rows["dtl_tot_part_price_amt"].replace(0, pd.NA)
     ) * 100
 
+    est_rows = add_line_labour_rate_match(est_rows)
+
     parts_results: list[dict] = []
     parts_subtot_results: list[dict] = []
     lbr_results: list[dict] = []
