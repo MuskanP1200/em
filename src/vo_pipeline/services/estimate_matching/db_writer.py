@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 import numpy as np
 import pandas as pd
@@ -180,6 +181,22 @@ CREATE TABLE IF NOT EXISTS {OUTPUT_SCHEMA}.{TABLE_OVERALL_SUMMARY} (
     update_timestamp           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )
 """
+
+# ── Column sets derived from DDL — single source of truth ────────────────────
+# Used to filter DataFrames before writing so only DDL-defined columns are sent.
+_SQL_KEYWORDS = {"primary", "constraint", "unique", "check", "foreign", "references"}
+
+
+def _cols_from_ddl(ddl: str) -> list[str]:
+    """Extract column names from a CREATE TABLE DDL string."""
+    return [
+        m for m in re.findall(r"^\s+(\w+)\s", ddl, re.MULTILINE)
+        if m.lower() not in _SQL_KEYWORDS
+    ]
+
+
+LINE_DETAIL_COLS:  list[str] = _cols_from_ddl(_DDL_LINE_DETAIL)
+SUBTOT_DETAIL_COLS: list[str] = _cols_from_ddl(_DDL_SUBTOT_DETAIL)
 
 
 def reset_em_tables() -> None:
