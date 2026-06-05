@@ -390,7 +390,7 @@ def add_line_labour_rate_match(est_line_df: pd.DataFrame) -> pd.DataFrame:
     # Actual rate = amount / hours where both are non-zero
     has_data = df["dtl_lbr_hr_qty"].notna() & df["dtl_lbr_hr_qty"].gt(0) & \
                df["dtl_lbr_tot_amt"].notna()
-    df["actual_line_lbr_rate"] = None
+    df["actual_line_lbr_rate"] = np.nan
     df.loc[has_data, "actual_line_lbr_rate"] = (
         df.loc[has_data, "dtl_lbr_tot_amt"] / df.loc[has_data, "dtl_lbr_hr_qty"]
     ).round(ROUND_DECIMALS)
@@ -398,12 +398,12 @@ def add_line_labour_rate_match(est_line_df: pd.DataFrame) -> pd.DataFrame:
     # Expected rate = CDR rate mapped by labour type
     df["expected_line_lbr_rate"] = get_unit_cost_by_labor_type(df)
 
-    # Match — only where both rates are available
+    # Match — only where both rates are available (nullable boolean: True/False/NA)
     can_compare = df["actual_line_lbr_rate"].notna() & df["expected_line_lbr_rate"].notna()
-    df["line_lbr_rate_match"] = None
-    df.loc[can_compare, "line_lbr_rate_match"] = (
-        df.loc[can_compare, "actual_line_lbr_rate"].round(ROUND_DECIMALS)
-        == df.loc[can_compare, "expected_line_lbr_rate"].round(ROUND_DECIMALS)
+    match = (
+        df["actual_line_lbr_rate"].round(ROUND_DECIMALS)
+        == df["expected_line_lbr_rate"].round(ROUND_DECIMALS)
     )
+    df["line_lbr_rate_match"] = match.where(can_compare, other=pd.NA).astype("boolean")
 
     return df
