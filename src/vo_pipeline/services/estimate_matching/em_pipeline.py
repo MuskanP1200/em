@@ -27,7 +27,7 @@ import pandas as pd
 os.environ["PYDEVD_WARN_EVALUATION_TIMEOUT"] = "30"
 os.environ["PYDEVD_UNBLOCK_THREADS_TIMEOUT"] = "30"
 
-from estimate_matching.db_writer import save_results  # noqa: E402
+from estimate_matching.db_writer import save_results, LINE_DETAIL_COLS, SUBTOT_DETAIL_COLS  # noqa: E402
 from estimate_matching.helpers import cast_numeric  # noqa: E402
 from estimate_matching.llm import create_llm_client  # noqa: E402
 from estimate_matching.parts_audit import (  # noqa: E402
@@ -86,7 +86,10 @@ def run_em_pipeline(
         est_rows["cieca_line_adj_amt"]
         / est_rows["dtl_tot_part_price_amt"].replace(0, pd.NA)
     ) * 100
-    est_rows = add_line_labour_rate_match(est_rows)
+    try:
+        est_rows = add_line_labour_rate_match(est_rows)
+    except Exception as e:
+        logger.error("est_id %s: LINE LABOUR RATE MATCH ERROR — %s", est_id, e)
 
     parts_results: list[dict] = []
     parts_subtot_results: list[dict] = []
@@ -196,6 +199,9 @@ def _build_output_tables(
         if col in line_detail.columns:
             line_detail[col] = line_detail[col].astype("boolean")
 
+    # Keep only columns defined in the DDL — DDL is the single source of truth
+    line_detail = line_detail.reindex(columns=[c for c in LINE_DETAIL_COLS if c in line_detail.columns])
+
     # ── subtot_detail ─────────────────────────────────────────────────────────
     df_parts_sub = df_parts_subtot_audit.copy() if not df_parts_subtot_audit.empty else pd.DataFrame()
     if not df_parts_sub.empty:
@@ -223,6 +229,9 @@ def _build_output_tables(
     if not subtot_detail.empty and "claim_number" in est_line_df.columns:
         claim_map = est_line_df[["est_id", "claim_number"]].drop_duplicates("est_id")
         subtot_detail = subtot_detail.merge(claim_map, on="est_id", how="left")
+
+    # Keep only columns defined in the DDL — DDL is the single source of truth
+    subtot_detail = subtot_detail.reindex(columns=[c for c in SUBTOT_DETAIL_COLS if c in subtot_detail.columns])
 
     # ── est_summary ───────────────────────────────────────────────────────────
     est_meta_cols = [
@@ -303,5 +312,3 @@ def _build_output_tables(
             )
 
     return est_summary, subtot_detail, line_detail
-
-
