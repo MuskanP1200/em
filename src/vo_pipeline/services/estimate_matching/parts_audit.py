@@ -227,7 +227,10 @@ def match_parts_subtotals(
       - parts_net_match:   sum of (part + adjustment)  == subtotal tot_amt
     Returns list of dicts (one per part type).
     """
-    PARTS_MAP = {"Glass": "Parts - Glass"}
+    PARTS_MAP = {
+        "Glass":             "Parts - Glass",
+        "Parts - Aftermarket": "Parts - Aftermarket (QRP)",
+    }
     _RATE_COL_MAP = {
         "foreign": "frn_part_disc_amt",
         "domestic": "dmstc_part_disc_amt",
@@ -249,7 +252,7 @@ def match_parts_subtotals(
         ["gross_amt", "adj_pct", "adj_tot_amt", "tot_amt"]
     ].fillna(0)
 
-    # Store ACTUAL (unrounded) aggregates — matching rounds inline below.
+    # Store values rounded to 2 decimal places — matching rounds further inline below.
     # expected_* = bottom-up values summed from line items (the audit's source of truth).
     grouped = (
         parts_df.groupby(["est_id", "cieca_part_typ_dsc"])
@@ -262,8 +265,9 @@ def match_parts_subtotals(
             expected_adj_amt=("cieca_line_adj_amt", "sum"),
         )
         .reset_index()
+        .round(2)
     )
-    grouped["expected_net_amt"] = grouped["expected_gross_amt"] + grouped["expected_adj_amt"]
+    grouped["expected_net_amt"] = (grouped["expected_gross_amt"] + grouped["expected_adj_amt"]).round(2)
 
     merged = grouped.merge(
         subtot_df[
@@ -291,7 +295,9 @@ def match_parts_subtotals(
         val = row.get(rate_col)
         # Negate to match adj_pct sign convention — CDR rates are positive (13)
         # but adj_pct in the subtotal is negative (-13, a deduction)
-        return -val if val is not None else None
+        # Treat 0 as "no info" — a CDR rate of 0 means no discount is configured,
+        # semantically identical to a missing rate. Only a positive value is meaningful.
+        return -val if val else None
 
     merged["expected_adj_pct"] = merged.apply(_expected_adj_pct, axis=1)
 
@@ -301,7 +307,7 @@ def match_parts_subtotals(
         merged["expected_gross_amt"]
         * pd.to_numeric(merged["expected_adj_pct"], errors="coerce")
         / 100
-    )
+    ).round(2)
 
     merged = cast_numeric(
         merged,
@@ -319,7 +325,7 @@ def match_parts_subtotals(
     # when there's no CDR rate). Parallels expected_adj_amt_calc for card-total display.
     merged["expected_net_amt_calc"] = (
         merged["expected_gross_amt"] + merged["expected_adj_amt_calc"].fillna(0)
-    )
+    ).round(2)
 
     gross_match = merged["expected_gross_amt"].round(ROUND_DECIMALS) == merged[
         "gross_amt"
@@ -349,9 +355,10 @@ def match_parts_subtotals(
     )
     # Compliance is only meaningful when a CDR discount % exists to calculate against.
     no_expected = merged["expected_adj_pct"].isna()
+    # No CDR rate = CDR profile is missing → cannot confirm discount is correct → flag as No Match.
     merged["adj_compliance_match"] = np.where(
         no_subtot, "No subtotal found",
-        np.where(no_expected, "Cannot Validate", np.where(adj_compliance, "Match", "No Match")),
+        np.where(no_expected, "No Match", np.where(adj_compliance, "Match", "No Match")),
     )
     merged["parts_net_match"] = np.where(
         no_subtot, "No subtotal found", np.where(net_match, "Match", "No Match")
@@ -377,6 +384,12 @@ def match_parts_subtotals(
         if row["overall_parts_subtot_match"] != "No Match":
             return None
         label = row["cieca_part_typ_dsc"]
+
+        # When there is no CDR discount rate, that alone is the finding — skip
+        # individual field comparisons which would produce confusing "nan%" messages.
+        if pd.isna(row.get("expected_adj_pct")):
+            return f"{label}: CDR profile is missing — discount rate not configured"
+
         reasons = []
         if row["parts_gross_match"] == "No Match":
             reasons.append(
