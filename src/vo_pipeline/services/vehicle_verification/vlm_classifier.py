@@ -247,8 +247,10 @@ class AzureVLMImageClassifier:
             "the exterior of a vehicle (front or rear).\n"
             "Requirements:\n"
             "  - Plate AND characters must be clearly visible and legible.\n"
-            "  - Be conservative: if characters are blurred, truncated, blocked, or "
-            'too angled to read reliably -> use "Others".\n'
+            "  - Classify as 'License Plate' if the plate AND its characters are clearly "
+            "legible — even if the plate is not the primary subject of the image (e.g. "
+            "visible in the background of a damage photo). Only use 'Others' if the "
+            "characters are blurred, truncated, blocked, or too angled to read.\n"
             "  - Handle U.S. license plate variations including horizontal alphanumeric "
             "sequences, vertically stacked characters, left/right vertical suffixes, "
             "multi-line plates, specialty plates with icons/color bands/prefixes, and "
