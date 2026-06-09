@@ -75,9 +75,12 @@ def match_paint_subtotals(
 
     # ── Expected rate (CDR) and Actual rate match───────────────────────────────────────────────────
 
+    _raw_paint_rate = est_df["pnt_mtrl_rate"].iloc[0]
+    # Treat 0 as "no info" — a CDR paint rate of 0 means no rate is configured,
+    # semantically identical to a missing rate.
     expected_paint_rate = (
-        est_df["pnt_mtrl_rate"].iloc[0]
-        if pd.notna(est_df["pnt_mtrl_rate"].iloc[0])
+        float(_raw_paint_rate)
+        if pd.notna(_raw_paint_rate) and float(_raw_paint_rate) != 0
         else None
     )
     actual_paint_rate = (
@@ -90,8 +93,17 @@ def match_paint_subtotals(
             if abs(actual_paint_rate - expected_paint_rate) <= 1.0
             else "No Match"
         )
+    elif expected_paint_rate is None:
+        # CDR has no paint rate configured — flag it and override the paint_note
+        paint_rate_match = "No Match"
+        paint_note = "CDR profile missing — paint material rate not configured"
+    elif actual_paint_amt > 0:
+        # paint_hrs = 0 but shop charged for paint materials — flag it
+        paint_rate_match = "No Match"
+        paint_note = "Paint amount charged but no refinish hours found"
     else:
-        paint_rate_match = "Cannot Validate"  # pnt_mtrl_rate not in CDR — cannot evaluate
+        # paint_hrs = 0 and actual_paint_amt = 0 — nothing charged, nothing expected
+        paint_rate_match = "Match"
 
     # ── Direction ─────────────────────────────────────────────────────────────
     if (
