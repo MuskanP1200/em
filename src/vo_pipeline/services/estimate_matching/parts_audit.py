@@ -281,10 +281,14 @@ def match_parts_subtotals(
             ]
         ],
         on=["est_id", "cieca_part_typ_dsc"],
-        how="left",
+        how="outer",
     )
 
-    no_subtot = merged["gross_amt"].isna()
+    # Fill est_id for subtotal-only rows (outer join leaves it NaN from grouped side)
+    merged["est_id"] = merged["est_id"].fillna(parts_df["est_id"].iloc[0])
+
+    no_subtot = merged["gross_amt"].isna()    # lines exist, no subtotal row
+    no_lines  = merged["expected_gross_amt"].isna()  # subtotal exists, no line items
 
     def _expected_adj_pct(row) -> float | None:
         discount_type = get_discount_type(
@@ -345,23 +349,23 @@ def match_parts_subtotals(
     )
 
     merged["parts_gross_match"] = np.where(
-        no_subtot, "No subtotal found", np.where(gross_match, "Match", "No Match")
+        no_subtot | no_lines, "No Match", np.where(gross_match, "Match", "No Match")
     )
     merged["adj_pct_match"] = np.where(
-        no_subtot, "No subtotal found", np.where(adj_pct_match, "Match", "No Match")
+        no_subtot | no_lines, "No Match", np.where(adj_pct_match, "Match", "No Match")
     )
     merged["adj_match"] = np.where(
-        no_subtot, "No subtotal found", np.where(adj_match, "Match", "No Match")
+        no_subtot | no_lines, "No Match", np.where(adj_match, "Match", "No Match")
     )
     # Compliance is only meaningful when a CDR discount % exists to calculate against.
     no_expected = merged["expected_adj_pct"].isna()
     # No CDR rate = CDR profile is missing → cannot confirm discount is correct → flag as No Match.
     merged["adj_compliance_match"] = np.where(
-        no_subtot, "No subtotal found",
+        no_subtot | no_lines, "No Match",
         np.where(no_expected, "No Match", np.where(adj_compliance, "Match", "No Match")),
     )
     merged["parts_net_match"] = np.where(
-        no_subtot, "No subtotal found", np.where(net_match, "Match", "No Match")
+        no_subtot | no_lines, "No Match", np.where(net_match, "Match", "No Match")
     )
     # Overall = no individual check is a hard "No Match".
     # "Cannot Validate" (no CDR rate to check against) is treated as neutral, not a fail.
@@ -375,8 +379,8 @@ def match_parts_subtotals(
         [merged[c].ne("No Match") for c in _overall_checks]
     )
     merged["overall_parts_subtot_match"] = np.where(
-        no_subtot,
-        "No subtotal found",
+        no_subtot | no_lines,
+        "No Match",
         np.where(_no_fail, "Match", "No Match"),
     )
 
@@ -384,6 +388,14 @@ def match_parts_subtotals(
         if row["overall_parts_subtot_match"] != "No Match":
             return None
         label = row["cieca_part_typ_dsc"]
+
+        # No subtotal row found — lines exist but no corresponding subtotal.
+        if pd.isna(row.get("gross_amt")):
+            return f"{label}: Subtotal missing — no parts subtotal row found"
+
+        # No line items found — subtotal charged but no corresponding line items.
+        if pd.isna(row.get("expected_gross_amt")):
+            return f"{label}: Subtotal charged (${row['gross_amt']:.2f}) but no line items found"
 
         # When there is no CDR discount rate, that alone is the finding — skip
         # individual field comparisons which would produce confusing "nan%" messages.
