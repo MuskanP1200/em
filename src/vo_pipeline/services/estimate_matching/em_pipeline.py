@@ -281,10 +281,13 @@ def _build_output_tables(
     )
 
     paint_pass = (
-        df_paint_subtot_audit.groupby("est_id")["paint_rate_match"]
+        df_paint_subtot_audit.groupby("est_id")
         .apply(
-            lambda x: not (x == "No Match").any()
-        )  # "Cannot Validate" treated as neutral
+            lambda g: not (
+                (g["paint_rate_match"] == "No Match").any()
+                | g["paint_amt_match"].eq(False).any()
+            )
+        )
         .rename("paint_est_pass")
         .reset_index()
         if df_paint_subtot_audit is not None and not df_paint_subtot_audit.empty
