@@ -45,9 +45,6 @@ def match_paint_subtotals(
         return []
 
     actual_paint_amt = round(float(paint_subtot["tot_amt"].sum() or 0), 2)
-    aggregated_labels = ", ".join(
-        paint_subtot["cieca_tot_typ_dsc"].str.strip().unique().tolist()
-    )
 
     # ── Refinish hours ────────────────────────────────────────────────────────
     ref_subtot = est_subtot_df[
@@ -129,28 +126,40 @@ def match_paint_subtotals(
     )
 
     logger.debug(
-        "est_id %s: paint tot=%.2f (from: %s) | paint_hrs=%.1f | expected=%s actual=%s | %s",
+        "est_id %s: paint tot=%.2f | paint_hrs=%.1f | expected=%s actual=%s | %s",
         est_id,
         actual_paint_amt,
-        aggregated_labels,
         paint_hrs,
         expected_paint_rate,
         actual_paint_rate,
         paint_rate_match,
     )
 
-    return [
-        {
-            "est_id": est_id,
-            "cieca_tot_typ_dsc": aggregated_labels,
-            "actual_paint_amt": actual_paint_amt,
-            "expected_paint_amt": expected_paint_amt,
-            "paint_amt_match": paint_amt_match,
-            "paint_hrs": paint_hrs,
-            "expected_paint_rate": expected_paint_rate,
-            "actual_paint_rate": actual_paint_rate,
-            "paint_rate_match": paint_rate_match,
-            "paint_rate_direction": paint_rate_direction,
-            "paint_note": paint_note,
-        }
-    ]
+    # Return one row per original paint subtotal type so each staging row
+    # joins correctly in em_subtot_agg. The aggregate rate/match result is
+    # the same for all rows — all pass or all fail together.
+    # expected_paint_amt is prorated by each row's share so card totals sum correctly.
+    results = []
+    for _, row in paint_subtot.iterrows():
+        row_actual = round(float(row["tot_amt"] or 0), 2)
+        row_expected = (
+            round(expected_paint_amt * (row_actual / actual_paint_amt), 2)
+            if expected_paint_amt is not None and actual_paint_amt > 0
+            else expected_paint_amt
+        )
+        results.append(
+            {
+                "est_id": est_id,
+                "cieca_tot_typ_dsc": row["cieca_tot_typ_dsc"].strip(),
+                "actual_paint_amt": row_actual,
+                "expected_paint_amt": row_expected,
+                "paint_amt_match": paint_amt_match,
+                "paint_hrs": paint_hrs,
+                "expected_paint_rate": expected_paint_rate,
+                "actual_paint_rate": actual_paint_rate,
+                "paint_rate_match": paint_rate_match,
+                "paint_rate_direction": paint_rate_direction,
+                "paint_note": paint_note,
+            }
+        )
+    return results
