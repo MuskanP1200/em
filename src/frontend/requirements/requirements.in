@@ -1,0 +1,29 @@
+# streamlit
+# beautifulsoup4
+# openai
+
+azure-identity 
+azure-keyvault-secrets
+pydantic_settings
+
+black
+ruff
+bandit
+
+# PyYaml
+
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+msal
+itsdangerous
+starlette
+httpx
+
+numpy
+pandas
+
+redis
+redis-entraid 
+starsessions[redis]
