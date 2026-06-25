@@ -1,0 +1,46 @@
+version: 1
+
+formatters:
+  json:
+    (): api.api_logging.config_logging.JsonFormatter
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: DEBUG
+    formatter: json
+
+root:
+  level: DEBUG
+  handlers: [console]
+
+loggers:
+  aiocache:
+    level: INFO
+    propagate: true
+
+  urllib3:
+    level: INFO
+    propagate: true
+
+  openai:
+    level: WARNING
+    propagate: true
+
+  httpx:
+    level: WARNING
+    propagate: true
+
+  httpcore:
+    level: WARNING
+    propagate: true
+
+  charset_normalizer:
+    level: WARNING
+    propagate: true
+
+  azure:
+    level: WARNING
+    propagate: true
+
+disable_existing_loggers: false
